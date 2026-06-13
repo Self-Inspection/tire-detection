@@ -33,9 +33,9 @@ Transitions are plain `useReducer` dispatches. All inter-screen data (tireType, 
 4. `useScanAnalysis` — receives depth frames, extracts center-40%-width ROI, downsamples to 32×32, applies bimodal histogram analysis to separate groove/surface depth peaks, accumulates readings until stable
 
 **Depth → measurement conversion** (`src/utils/depthToTread.js`):
-- ARPortraitDepth outputs normalized depth where higher = farther (0 = near, 1 = far)
-- Tire surface (rubber peaks) = lower values; groove bottoms = higher values
-- Bimodal histogram peaks split on groove vs. surface
+- MiDaS outputs disparity (inverse depth): higher = closer to camera
+- Tire surface (rubber peaks) = higher values (closer); groove bottoms = lower values
+- Bimodal histogram peaks split on groove vs. surface; peak2 (higher bin) = surface, peak1 = groove
 - Scale calibrated from known tread width + estimated focal length (853px default)
 - `DEPTH_SCALE_TUNE` constant (currently 0.5) needs empirical tuning against a known tire
 
