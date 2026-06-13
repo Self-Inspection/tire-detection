@@ -72,8 +72,8 @@ export default function ScannerScreen({ tireType, onComplete, onCancel }) {
         </div>
       )}
 
-      {/* Error state */}
-      {(cameraError || modelError) && !loading && (
+      {/* Error state — show even while spinner is up so timeout errors surface */}
+      {(cameraError || modelError) && (
         <div className="absolute inset-0 bg-black/80 flex items-center justify-center p-6 z-20">
           <div className="bg-dark-card rounded-xl p-6 text-center max-w-xs">
             <p className="text-red-400 mb-4 text-sm">{cameraError || modelError}</p>

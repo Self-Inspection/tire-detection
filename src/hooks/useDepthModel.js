@@ -1,6 +1,16 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
 const MIN_FRAME_INTERVAL_MS = 100; // throttle to ~10fps
+const MODEL_LOAD_TIMEOUT_MS = 40_000;
+
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms)
+    )
+  ]);
+}
 
 export default function useDepthModel() {
   const [isModelLoaded, setIsModelLoaded] = useState(false);
@@ -14,17 +24,29 @@ export default function useDepthModel() {
     async function load() {
       try {
         const tf = await import('@tensorflow/tfjs');
-        // Prefer WebGL; fall back to WASM/CPU on failure
+        // Prefer WebGL; fall back to CPU on failure
         try {
           await tf.setBackend('webgl');
+          await tf.ready();
         } catch {
-          await tf.setBackend('wasm');
+          await tf.setBackend('cpu');
+          await tf.ready();
         }
-        await tf.ready();
 
         const depthEstimation = await import('@tensorflow-models/depth-estimation');
-        const estimator = await depthEstimation.createEstimator(
-          depthEstimation.SupportedModels.ARPortraitDepth
+
+        // ARPortraitDepth fetches two models over the network (depth + segmenter).
+        // Apply a hard timeout so the spinner never hangs indefinitely.
+        const estimator = await withTimeout(
+          depthEstimation.createEstimator(
+            depthEstimation.SupportedModels.ARPortraitDepth,
+            {
+              // Use tfjs runtime for segmenter to avoid the external MediaPipe dep
+              runtime: 'tfjs',
+            }
+          ),
+          MODEL_LOAD_TIMEOUT_MS,
+          'Depth model'
         );
 
         if (active) {
