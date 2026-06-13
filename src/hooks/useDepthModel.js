@@ -79,7 +79,7 @@ export default function useDepthModel() {
       const tensor = depthMap.depthTensor;
       const [height, width] = tensor.shape;
       const rawData = await tensor.data(); // Float32Array
-      depthMap.dispose();
+      tensor.dispose(); // dispose the tensor we hold; depthMap has no .dispose() in 0.0.3
 
       return { data: new Float32Array(rawData), width, height };
     } catch (err) {
