@@ -1,15 +1,15 @@
 import { useState, useRef, useEffect } from 'react';
-import { computeGrooveDepth, getSafetyLevel } from '../utils/depthToTread.js';
+import { computeGrooveDepth, computeFallbackGrooveDepth, getSafetyLevel } from '../utils/depthToTread.js';
 import { computeMotionMagnitude } from '../utils/opticalFlow.js';
-import { computeHistogram, findBimodalPeaks, computeCV, estimateProgress } from '../utils/scanQuality.js';
+import { computeHistogram, findBimodalPeaks, computeCV } from '../utils/scanQuality.js';
 
-const DS = 32;               // downsample target (DS x DS)
-const ROI_X = 0.30;          // center 40% of frame width
+const DS = 32;
+const ROI_X = 0.30;
 const ROI_W = 0.40;
-const MIN_FRAMES       = 30;
-const TARGET_CV        = 0.15;
-const STABLE_MS        = 2000;
-const MOTION_THRESHOLD = 0.05;
+const MIN_FRAMES       = 40;   // total frames before completion is possible
+const TARGET_CV        = 0.25; // relaxed — noisy depth maps are expected
+const STABLE_MS        = 1500;
+const MOTION_THRESHOLD = 0.08;
 
 function downsample(data, srcW, srcH, dstW, dstH) {
   const out = new Float32Array(dstW * dstH);
@@ -40,16 +40,15 @@ export default function useScanAnalysis({ videoRef, estimateDepth, isModelLoaded
   const [scanResult, setScanResult] = useState(null);
   const [depthMap,   setDepthMap]   = useState(null);
 
-  const depthBuf      = useRef([]); // rolling: { depthMm }
-  const bimodalBuf    = useRef([]); // rolling: 0 or 1
+  const depthBuf      = useRef([]); // rolling depth readings (mm)
+  const totalFrames   = useRef(0);  // every frame received from model
   const stableStart   = useRef(null);
   const prevDs        = useRef(null);
   const running       = useRef(false);
   const rafId         = useRef(null);
 
-  // Keep calibration context up-to-date in the RAF loop via refs
-  const tireTypeRef         = useRef(tireType);
-  const metricsScaleRef     = useRef(metricsScaleFactor);
+  const tireTypeRef     = useRef(tireType);
+  const metricsScaleRef = useRef(metricsScaleFactor);
   useEffect(() => { tireTypeRef.current = tireType; }, [tireType]);
   useEffect(() => { metricsScaleRef.current = metricsScaleFactor; }, [metricsScaleFactor]);
 
@@ -59,13 +58,11 @@ export default function useScanAnalysis({ videoRef, estimateDepth, isModelLoaded
 
     async function loop() {
       if (!running.current) return;
-
       const video = videoRef.current;
       if (video && video.readyState >= 2) {
         const frame = await estimateDepth(video);
         if (frame && running.current) processFrame(frame);
       }
-
       rafId.current = requestAnimationFrame(loop);
     }
 
@@ -77,7 +74,9 @@ export default function useScanAnalysis({ videoRef, estimateDepth, isModelLoaded
   }, [isModelLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function processFrame({ data, width, height }) {
-    // Extract center ROI
+    totalFrames.current++;
+
+    // Extract center-40% ROI
     const roiX = Math.floor(width * ROI_X);
     const roiW = Math.floor(width * ROI_W);
     const roi = new Float32Array(roiW * height);
@@ -85,82 +84,73 @@ export default function useScanAnalysis({ videoRef, estimateDepth, isModelLoaded
       for (let x = 0; x < roiW; x++)
         roi[y * roiW + x] = data[y * width + roiX + x];
 
-    // Downsample to DS×DS
     const ds = downsample(roi, roiW, height, DS, DS);
     setDepthMap(ds);
 
-    // Bimodal check (indicates groove/surface visible)
     const hist = computeHistogram(ds, 64);
     const peaks = findBimodalPeaks(hist);
     const hasBimodal = peaks !== null;
 
-    // Motion magnitude
     const motion = computeMotionMagnitude(prevDs.current, ds);
     prevDs.current = ds;
 
-    // Surface depth for distance guidance (lower bin = nearer = surface with ARPortraitDepth)
-    const surfaceNorm = hasBimodal ? peaks.peak1 / 63 : null;
-
-    // Determine guidance
+    // Distance guidance: use overall depth mean as proxy when no bimodal
+    const depthMean = ds.reduce((a, b) => a + b, 0) / ds.length;
     let g = null;
-    if (!hasBimodal) {
-      g = 'tilt_phone';
-    } else if (surfaceNorm < 0.15) {
+    if (depthMean < 0.10) {
       g = 'too_far';
-    } else if (surfaceNorm > 0.80) {
+    } else if (depthMean > 0.90) {
       g = 'too_close';
     } else if (motion > MOTION_THRESHOLD) {
       g = 'move_slower';
     }
 
-    // Accumulate depth readings only when quality is acceptable
-    if (hasBimodal && g !== 'move_slower' && g !== 'too_far' && g !== 'too_close') {
-      const result = computeGrooveDepth(ds, {
+    // Accumulate depth readings — try bimodal first, then fallback
+    if (g !== 'too_far' && g !== 'too_close') {
+      const config = {
         treadWidthMm: tireTypeRef.current?.treadWidthMm,
         metricsScaleFactor: metricsScaleRef.current
-      });
+      };
+      const result = (hasBimodal && computeGrooveDepth(ds, config))
+                  ?? computeFallbackGrooveDepth(ds, config);
       if (result) {
         depthBuf.current.push(result.depthMm);
         if (depthBuf.current.length > 90) depthBuf.current.shift();
       }
     }
 
-    bimodalBuf.current.push(hasBimodal ? 1 : 0);
-    if (bimodalBuf.current.length > 90) bimodalBuf.current.shift();
+    const tf = totalFrames.current;
+    const frames = depthBuf.current.length;
+    const recent = depthBuf.current.slice(-20);
+    const cv     = frames >= 5 ? computeCV(recent) : 1;
 
-    const frames       = depthBuf.current.length;
-    const recent       = depthBuf.current.slice(-30);
-    const cv           = frames >= 5 ? computeCV(recent) : 1;
-    const bimodalFrac  = bimodalBuf.current.slice(-30).reduce((a, b) => a + b, 0) /
-                         Math.min(30, bimodalBuf.current.length);
+    // Progress: 70% from total frame count, 30% from depth stability
+    const frameFrac     = Math.min(1, tf / MIN_FRAMES);
+    const stabilityFrac = frames >= 10 ? Math.max(0, 1 - cv / TARGET_CV) : 0;
+    const newProgress   = Math.min(0.99, 0.7 * frameFrac + 0.3 * stabilityFrac);
 
-    // Refine guidance at lower priority
+    // Guidance label
     if (g === null) {
-      g = cv < TARGET_CV * 1.3 && frames >= MIN_FRAMES * 0.7 ? 'almost_done' : 'keep_going';
+      g = frameFrac > 0.75 ? 'almost_done' : 'keep_going';
     }
-
     setGuidance(g);
-    setProgress(estimateProgress(frames, cv, bimodalFrac, MIN_FRAMES));
+    setProgress(newProgress);
 
-    // Completion gate: all 5 conditions
-    const stable = frames >= MIN_FRAMES
-                && cv < TARGET_CV
-                && bimodalFrac >= 0.8
-                && g !== 'move_slower'
-                && g !== 'too_far'
-                && g !== 'too_close';
+    // Completion: enough total frames + depth buffer is stable
+    // Also force-complete after 3× MIN_FRAMES regardless (graceful timeout)
+    const stableEnough = tf >= MIN_FRAMES && frames >= 15 && cv < TARGET_CV;
+    const forceDone    = tf >= MIN_FRAMES * 3 && frames >= 10;
 
-    if (stable) {
+    if (stableEnough || forceDone) {
       if (!stableStart.current) stableStart.current = performance.now();
       else if (performance.now() - stableStart.current >= STABLE_MS) {
-        const medianDepth = medianOf(depthBuf.current.slice(-30));
+        const medianDepth = medianOf(depthBuf.current.slice(-20));
         const depth32nds  = Math.max(1, Math.min(20, Math.round(medianDepth / 0.794)));
-        const result = {
-          depthMm:     parseFloat(medianDepth.toFixed(1)),
+        setScanResult({
+          depthMm:    parseFloat(medianDepth.toFixed(1)),
           depth32nds,
-          rating:      getSafetyLevel(medianDepth)
-        };
-        setScanResult(result);
+          rating:     getSafetyLevel(medianDepth)
+        });
         setProgress(1);
         setIsComplete(true);
         running.current = false;

@@ -85,3 +85,31 @@ export function computeGrooveDepth(depthRoi, { treadWidthMm, metricsScaleFactor 
     depth32nds: Math.max(1, Math.round(depthMm / 0.794)) // 1/32" = 0.794mm
   };
 }
+
+/**
+ * Fallback when bimodal peaks aren't detectable.
+ * Uses the P10–P90 depth range within the ROI as a proxy for groove depth.
+ * Less accurate than bimodal analysis but always produces a value.
+ */
+export function computeFallbackGrooveDepth(depthRoi, { treadWidthMm, metricsScaleFactor } = {}) {
+  const sorted = Float32Array.from(depthRoi).sort();
+  const n = sorted.length;
+  const p10 = sorted[Math.floor(n * 0.10)];
+  const p90 = sorted[Math.floor(n * 0.90)];
+  const depthDelta = p90 - p10;
+
+  if (depthDelta < 0.015) return null; // ROI is flat — likely not on a tire
+
+  let depthMm;
+  if (metricsScaleFactor != null && metricsScaleFactor > 0) {
+    depthMm = depthDelta * metricsScaleFactor * 1000 * DEPTH_SCALE_TUNE;
+  } else {
+    const refWidthMm  = treadWidthMm ?? 190;
+    const treadWidthPx = 1280 * BRACKET_FRACTION;
+    const Z_surface_mm = DEFAULT_FOCAL_PX * (refWidthMm / treadWidthPx);
+    depthMm = depthDelta * Z_surface_mm * DEPTH_SCALE_TUNE;
+  }
+
+  depthMm = Math.max(0.5, Math.min(20, depthMm));
+  return { depthMm, depth32nds: Math.max(1, Math.round(depthMm / 0.794)) };
+}
