@@ -3,10 +3,11 @@ import react from '@vitejs/plugin-react';
 import basicSsl from '@vitejs/plugin-basic-ssl';
 import { VitePWA } from 'vite-plugin-pwa';
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [
     react(),
-    basicSsl(),
+    // Only use self-signed SSL for local dev; Railway terminates HTTPS at the proxy
+    command === 'serve' && basicSsl(),
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
@@ -32,9 +33,14 @@ export default defineConfig({
         ]
       }
     })
-  ],
+  ].filter(Boolean),
   server: {
     host: true
+  },
+  preview: {
+    host: true,
+    port: parseInt(process.env.PORT) || 4173,
+    allowedHosts: 'all'
   },
   build: {
     rollupOptions: {
@@ -57,4 +63,4 @@ export default defineConfig({
       }
     }
   }
-});
+}));
