@@ -57,6 +57,9 @@ export default function HomeScreen({ onCameraGranted }) {
       <Button variant="primary" onClick={startScan} loading={loading} fullWidth>
         Start Scan
       </Button>
+      <p className="text-center text-gray-600 text-xs mt-3">
+        {new Date(__BUILD_TIME__).toLocaleString()}
+      </p>
     </div>
   );
 }
