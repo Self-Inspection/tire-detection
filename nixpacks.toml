@@ -8,4 +8,4 @@ cmds = ["npm ci --include=dev"]
 cmds = ["npm run build"]
 
 [start]
-cmd = "npm run start"
+cmd = "serve dist -s -l $PORT"
