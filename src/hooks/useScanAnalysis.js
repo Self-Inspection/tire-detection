@@ -33,7 +33,7 @@ function medianOf(arr) {
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 }
 
-export default function useScanAnalysis({ videoRef, estimateDepth, isModelLoaded, tireType, metricsScaleFactor }) {
+export default function useScanAnalysis({ videoRef, estimateDepth, isModelLoaded, tireType, metricsScaleFactor, focalLengthPx }) {
   const [guidance,   setGuidance]   = useState(null);
   const [progress,   setProgress]   = useState(0);
   const [isComplete, setIsComplete] = useState(false);
@@ -49,8 +49,10 @@ export default function useScanAnalysis({ videoRef, estimateDepth, isModelLoaded
 
   const tireTypeRef     = useRef(tireType);
   const metricsScaleRef = useRef(metricsScaleFactor);
+  const focalLengthRef  = useRef(focalLengthPx);
   useEffect(() => { tireTypeRef.current = tireType; }, [tireType]);
   useEffect(() => { metricsScaleRef.current = metricsScaleFactor; }, [metricsScaleFactor]);
+  useEffect(() => { focalLengthRef.current = focalLengthPx; }, [focalLengthPx]);
 
   useEffect(() => {
     if (!isModelLoaded) return;
@@ -109,7 +111,8 @@ export default function useScanAnalysis({ videoRef, estimateDepth, isModelLoaded
     if (g !== 'too_far' && g !== 'too_close') {
       const config = {
         treadWidthMm: tireTypeRef.current?.treadWidthMm,
-        metricsScaleFactor: metricsScaleRef.current
+        metricsScaleFactor: metricsScaleRef.current,
+        focalLengthPx: focalLengthRef.current
       };
       const result = (hasBimodal && computeGrooveDepth(ds, config))
                   ?? computeFallbackGrooveDepth(ds, config);

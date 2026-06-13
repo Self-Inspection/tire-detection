@@ -13,14 +13,15 @@ export default function ScannerScreen({ tireType, onComplete, onCancel }) {
 
   const { error: cameraError, isReady }        = useCamera(videoRef);
   const { estimateDepth, isModelLoaded, modelError } = useDepthModel();
-  const { metricsScaleFactor }                 = useWebXR();
+  const { metricsScaleFactor, focalLengthPx }  = useWebXR();
 
   const { guidance, progress, isComplete, scanResult, depthMap } = useScanAnalysis({
     videoRef,
     estimateDepth,
     isModelLoaded,
     tireType,
-    metricsScaleFactor
+    metricsScaleFactor,
+    focalLengthPx
   });
 
   // Fire completion callback once
