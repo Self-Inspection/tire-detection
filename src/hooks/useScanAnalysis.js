@@ -98,8 +98,8 @@ export default function useScanAnalysis({ videoRef, estimateDepth, isModelLoaded
     const motion = computeMotionMagnitude(prevDs.current, ds);
     prevDs.current = ds;
 
-    // Surface depth for distance guidance — MiDaS: higher bin = closer = surface at peak2
-    const surfaceNorm = hasBimodal ? peaks.peak2 / 63 : null;
+    // Surface depth for distance guidance (lower bin = nearer = surface with ARPortraitDepth)
+    const surfaceNorm = hasBimodal ? peaks.peak1 / 63 : null;
 
     // Determine guidance
     let g = null;

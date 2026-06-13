@@ -27,9 +27,9 @@ const DEPTH_SCALE_TUNE = 0.5;
 /**
  * Converts a 32x32 downsampled depth ROI (Float32Array, values 0–1) into a groove depth.
  *
- * MiDaS outputs disparity (inverse depth): higher value = closer to camera.
- * Tire surface (rubber peaks) is closer → higher values.
- * Groove bottoms are farther → lower values.
+ * ARPortraitDepth outputs normalized depth: higher value = farther from camera.
+ * Tire surface (rubber peaks) is closer → lower values.
+ * Groove bottoms are farther → higher values.
  *
  * @param {Float32Array} depthRoi - 32x32 depth values
  * @param {{ treadWidthMm: number, metricsScaleFactor: number|null }} config
@@ -54,11 +54,11 @@ export function computeGrooveDepth(depthRoi, { treadWidthMm, metricsScaleFactor 
   const peaks = findBimodalPeaks(histogram);
   if (!peaks) return null;
 
-  // MiDaS: higher disparity = closer; peak2 (higher bin) = nearer = tire surface
-  //                                    peak1 (lower bin)  = farther = groove bottom
-  const d_surface = min + (peaks.peak2 / 64) * range;
-  const d_groove  = min + (peaks.peak1 / 64) * range;
-  const depthDelta = d_surface - d_groove; // positive (surface closer than groove)
+  // peak1 (lower bin) = nearer = tire surface
+  // peak2 (higher bin) = farther = groove bottom
+  const d_surface = min + (peaks.peak1 / 64) * range;
+  const d_groove  = min + (peaks.peak2 / 64) * range;
+  const depthDelta = d_groove - d_surface; // positive
 
   let depthMm;
 

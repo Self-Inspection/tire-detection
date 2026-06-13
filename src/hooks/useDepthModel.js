@@ -35,12 +35,11 @@ export default function useDepthModel() {
 
         const depthEstimation = await import('@tensorflow-models/depth-estimation');
 
-        // MiDaS: general-purpose monocular depth, no MediaPipe dependency.
-        // Outputs disparity (higher value = closer to camera).
+        // ARPortraitDepth: uses runtime:'tfjs' segmenter (no MediaPipe WASM needed).
         // Apply a hard timeout so the spinner never hangs indefinitely.
         const estimator = await withTimeout(
           depthEstimation.createEstimator(
-            depthEstimation.SupportedModels.MiDaS
+            depthEstimation.SupportedModels.ARPortraitDepth
           ),
           MODEL_LOAD_TIMEOUT_MS,
           'Depth model'

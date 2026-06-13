@@ -42,12 +42,18 @@ export default defineConfig(({ command }) => ({
     port: parseInt(process.env.PORT) || 4173,
     allowedHosts: 'all'
   },
+  resolve: {
+    alias: {
+      // body-segmentation has a static require('@mediapipe/selfie_segmentation')
+      // at the top of its bundle. We use runtime:'tfjs' so the MediaPipe code
+      // path is never entered — this stub satisfies the import without the WASM pkg.
+      '@mediapipe/selfie_segmentation': '/src/mediapipe-stub.js',
+    }
+  },
   build: {
     rollupOptions: {
-      // These optional MediaPipe packages are lazy-loaded by body-segmentation
-      // and are not needed for the ARPortraitDepth model we use.
+      // Only the unrelated MediaPipe packages remain external.
       external: [
-        '@mediapipe/selfie_segmentation',
         '@mediapipe/face_detection',
         '@mediapipe/face_mesh',
         '@mediapipe/pose'
