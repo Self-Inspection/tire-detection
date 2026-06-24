@@ -70,21 +70,36 @@ export default function SetupScreen({ onBeginScan }) {
 
       <div className="mt-5 bg-dark-card rounded-xl p-4">
         <p className="text-sm font-semibold mb-2">How to position your phone</p>
-        <div className="relative bg-gray-800 rounded-lg overflow-hidden" style={{ height: 80 }}>
-          <svg viewBox="0 0 320 80" className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
-            <rect x="20" y="15" width="280" height="50" rx="4" fill="#2a2a2a" />
-            {[55, 90, 125, 160, 195, 230].map((x, i) => (
-              <rect key={i} x={x} y="15" width="16" height="50" rx="2" fill="#444" />
+        <div className="relative bg-gray-800 rounded-lg overflow-hidden flex justify-center py-4" style={{ minHeight: 200 }}>
+          <svg viewBox="0 0 120 200" className="h-48 w-auto" xmlns="http://www.w3.org/2000/svg">
+            {/* Phone body — portrait */}
+            <rect x="28" y="8" width="64" height="168" rx="10" fill="#1a1a2e" stroke="#555" strokeWidth="2" />
+            <rect x="34" y="22" width="52" height="140" rx="2" fill="#111" />
+            {/* Camera notch hint */}
+            <circle cx="60" cy="16" r="3" fill="#333" />
+
+            {/* Tread: grooves run left-to-right (horizontal lines) */}
+            <rect x="34" y="22" width="52" height="140" fill="#2a2a2a" />
+            {[0, 1, 2, 3, 4, 5, 6].map(i => (
+              <g key={i}>
+                <rect x="38" y={28 + i * 18} width="44" height="10" rx="1" fill="#444" />
+                <rect x="38" y={38 + i * 18} width="44" height="4" fill="#1a1a1a" />
+              </g>
             ))}
-            <rect x="64" y="8" width="192" height="64" rx="4" fill="none" stroke="#3b82f6"
-                  strokeWidth="2" strokeDasharray="8,4" />
-            <text x="160" y="78" fill="#3b82f6" fontSize="9" textAnchor="middle" fontFamily="sans-serif">
-              {selected.id === 'motorcycle' ? '20–30 cm' : '30–40 cm'}
+
+            {/* Scan bracket — tall center crop (portrait) */}
+            <rect x="44" y="40" width="32" height="100" rx="3" fill="none" stroke="#3b82f6"
+                  strokeWidth="2" strokeDasharray="6,3" />
+
+            {/* Portrait label */}
+            <text x="60" y="192" fill="#3b82f6" fontSize="8" textAnchor="middle" fontFamily="sans-serif">
+              Portrait · {selected.id === 'motorcycle' ? '20–30' : '30–40'} cm
             </text>
           </svg>
         </div>
         <p className="text-xs text-gray-400 mt-2">
-          Hold phone {selected.id === 'motorcycle' ? '20–30' : '30–40'} cm away, tread filling the dashed bracket.
+          Hold phone <span className="text-white">upright in portrait</span> — do not rotate sideways.
+          Point the camera at the tread so grooves run <span className="text-white">left-to-right</span> inside the blue bracket.
         </p>
       </div>
 
