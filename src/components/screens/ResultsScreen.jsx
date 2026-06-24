@@ -59,8 +59,8 @@ export default function ResultsScreen({ result, onScanAgain, onDone }) {
           <div className="space-y-2">
             {grooves.map(g => (
               <div key={g.id} className="flex items-center justify-between text-sm py-1.5 border-b border-gray-800 last:border-0">
-                <span className="text-gray-300">
-                  #{g.id} · {g.positionLabel}
+                <span className="text-gray-300 capitalize">
+                  {g.positionLabel}
                 </span>
                 <span className={`font-semibold tabular-nums ${RATING_CLS[g.rating] ?? ''}`}>
                   {g.depth32nds}/32″

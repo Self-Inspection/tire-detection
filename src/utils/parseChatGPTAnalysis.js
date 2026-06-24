@@ -2,28 +2,20 @@ import {
   getSafetyLevelFrom32nds,
   clamp32nds,
   MM_PER_32ND,
-  MAX_GROOVES
+  MAX_GROOVES,
+  GROOVE_POSITION_LABELS,
+  groovePositionsForCount
 } from './depthToTread.js';
 import { GUIDANCE_VALUES } from './tireAnalysisPrompt.js';
 
 const BLOCKED_GUIDANCE = new Set(['move_slower', 'too_far', 'too_close', 'tilt_phone']);
 
-const POSITION_LABELS = {
-  'far-left': 'Far left',
-  left: 'Left',
-  'center-left': 'Center left',
-  center: 'Center',
-  'center-right': 'Center right',
-  right: 'Right',
-  'far-right': 'Far right'
-};
-
-function formatGroove(g, index) {
+function formatGroove(g, index, position) {
   const depth32nds = clamp32nds(g.depth_32nds);
   return {
-    id: g.id ?? index + 1,
-    position: g.position ?? 'center',
-    positionLabel: POSITION_LABELS[g.position] ?? g.position ?? `Groove ${index + 1}`,
+    id: index + 1,
+    position,
+    positionLabel: GROOVE_POSITION_LABELS[position] ?? position,
     depth32nds,
     depthMm: typeof g.depth_mm === 'number'
       ? parseFloat(g.depth_mm.toFixed(1))
@@ -35,11 +27,14 @@ function formatGroove(g, index) {
 
 function parseGrooves(raw) {
   if (!Array.isArray(raw.grooves)) return [];
-  return raw.grooves
+
+  const sorted = raw.grooves
     .filter(g => g && typeof g.depth_32nds === 'number')
     .sort((a, b) => (a.id ?? 0) - (b.id ?? 0))
-    .slice(0, MAX_GROOVES)
-    .map(formatGroove);
+    .slice(0, MAX_GROOVES);
+
+  const positions = groovePositionsForCount(sorted.length);
+  return sorted.map((g, index) => formatGroove(g, index, positions[index]));
 }
 
 function summaryFromGrooves(grooves) {

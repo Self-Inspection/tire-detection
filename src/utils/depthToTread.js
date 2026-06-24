@@ -13,6 +13,25 @@ export const TIRE_TYPES = [
 export const DEFAULT_TIRE_TYPE = TIRE_TYPES[0];
 export const MAX_GROOVES = 4;
 
+/** Display labels for groove positions (left → right across tread). */
+export const GROOVE_POSITION_LABELS = {
+  left: 'Left',
+  central: 'Central',
+  'central-left': 'Central left',
+  'central-right': 'Central right',
+  right: 'Right'
+};
+
+/** Position keys by groove count — assign in order id 1…n (left to right). */
+export function groovePositionsForCount(count) {
+  const n = Math.min(Math.max(0, count), MAX_GROOVES);
+  if (n >= 4) return ['left', 'central-left', 'central-right', 'right'];
+  if (n === 3) return ['left', 'central', 'right'];
+  if (n === 2) return ['left', 'right'];
+  if (n === 1) return ['central'];
+  return [];
+}
+
 // Rating bands match standard tread depth chart (32nds):
 // 8–10/32" = GOOD, 4–7/32" = OKAY, 3/32" = BAD, 2/32" = legal limit
 export function clamp32nds(value) {

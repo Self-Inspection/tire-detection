@@ -26,9 +26,13 @@ Identify EACH visible groove in the image(s) and estimate its remaining depth in
 ## Analysis steps
 1. Confirm repeating tread blocks and grooves are visible. If not → guidance: tilt_phone, grooves: [].
 2. Check framing: too_far, too_close, or blur → appropriate guidance.
-3. Scan across the image along the groove direction. Measure up to ${MAX_GROOVES} distinct groove channels (pick the clearest). For each:
-   - Assign id (1, 2, 3… in order along the groove direction)
-   - Assign position: "far-left" | "left" | "center-left" | "center" | "center-right" | "right" | "far-right" (or top/bottom equivalents if grooves run vertically)
+3. Scan across the image along the groove direction (left to right). Return at most ${MAX_GROOVES} grooves — never more. For each groove:
+   - Assign id 1, 2, 3… in left-to-right order
+   - Assign position using ONLY these labels:
+     • 4 grooves: "left", "central-left", "central-right", "right" (ids 1–4)
+     • 3 grooves: "left", "central", "right" (ids 1–3)
+     • 2 grooves: "left", "right"
+     • 1 groove: "central"
    - Estimate depth_32nds (integer 2–10) by comparing groove bottom to adjacent block height
    - Set per-groove confidence 0.0–1.0
 4. Check tread wear indicator bars (TWIs). If flush with surface, affected grooves are ~2/32".
@@ -73,7 +77,8 @@ Return ONLY JSON:
 }
 
 Rules:
-- grooves array must list up to ${MAX_GROOVES} distinct grooves (the clearest ones in frame). Do not return more than ${MAX_GROOVES}.
+- grooves array: maximum ${MAX_GROOVES} entries. Pick the clearest grooves left-to-right.
+- Use only the position labels listed above (central-left / central-right for 4; central for 3).
 - depth_mm = depth_32nds × 0.794 for each groove.
 - measurement.depth_32nds = min of all groove depth_32nds values.
 - If no grooves measurable, return grooves: [] and null measurement.
@@ -87,7 +92,7 @@ export function buildUserPrompt({ tireType, targetDistanceCm, imageCount = 1 }) 
     ? `${imageCount} photos of the same tread (burst capture). Cross-check depths across frames.`
     : 'One photo of tire tread.';
 
-  return `${frames} Find up to ${MAX_GROOVES} visible tread grooves and measure depth for each one. Grooves may run horizontally or vertically in the image.
+  return `${frames} Find up to ${MAX_GROOVES} visible tread grooves left-to-right and measure depth for each. Use position labels: left, central-left, central-right, right (4 grooves) or left, central, right (3 grooves).
 
 Tire type: ${tireType?.label ?? 'car'} (tread width ~${tireType?.treadWidthMm ?? 190} mm)
 Camera distance: ${targetDistanceCm} cm, portrait orientation.
