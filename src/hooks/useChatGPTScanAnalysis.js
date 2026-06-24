@@ -20,7 +20,7 @@ export default function useChatGPTScanAnalysis({
   const [scanResult, setScanResult] = useState(null);
   const [analysisError, setAnalysisError] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [lastNotes, setLastNotes] = useState('Fill the blue box with tire tread, then tap Capture.');
+  const [lastNotes, setLastNotes] = useState('Align tread in the blue box, then tap Capture.');
   const [attempt, setAttempt] = useState(0);
 
   const apiAttempts = useRef(0);

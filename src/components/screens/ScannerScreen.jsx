@@ -128,7 +128,7 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
             <p className="text-white/60 text-xs text-center pointer-events-none">
               {isAnalyzing
                 ? 'Sending photo for groove analysis…'
-                : 'Fill the blue box with tread — move closer if needed'}
+                : 'Align tread in the blue box, then tap Capture'}
             </p>
             {lastNotes && (
               <p className="text-white/40 text-[10px] text-center line-clamp-3 pointer-events-none">
@@ -155,15 +155,15 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
       {showConfirm && (
         <div className="absolute inset-0 bg-black/60 flex items-center justify-center p-6 z-[60]">
           <div className="bg-dark-card rounded-xl p-6 w-full max-w-xs text-center">
-            <p className="font-semibold mb-1">Cancel scan?</p>
-            <p className="text-gray-400 text-sm mb-6">Your progress will be lost.</p>
+            <p className="font-semibold mb-1">Leave without results?</p>
+            <p className="text-gray-400 text-sm mb-6">Your photo will be discarded.</p>
             <div className="flex gap-3">
               <button
                 type="button"
                 onClick={() => setShowConfirm(false)}
                 className="flex-1 py-3 rounded-lg bg-dark-surface text-sm"
               >
-                Keep Scanning
+                Keep Capturing
               </button>
               <button
                 type="button"

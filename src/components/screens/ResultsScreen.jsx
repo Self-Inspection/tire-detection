@@ -37,7 +37,7 @@ export default function ResultsScreen({ result, onScanAgain, onDone }) {
 
   return (
     <div className="flex flex-col h-full safe-top safe-bottom px-6 py-6 overflow-y-auto">
-      <h2 className="text-2xl font-bold mb-5">Scan Results</h2>
+      <h2 className="text-2xl font-bold mb-5">Results</h2>
 
       <div className="bg-dark-card rounded-2xl p-6 text-center mb-4">
         <p className="text-gray-400 text-sm mb-1">Overall (shallowest groove)</p>
@@ -98,7 +98,7 @@ export default function ResultsScreen({ result, onScanAgain, onDone }) {
 
       <div className="flex gap-3 mt-6">
         <Button variant="secondary" onClick={onDone} className="flex-1">Done</Button>
-        <Button variant="primary"   onClick={onScanAgain} className="flex-1">Scan Again</Button>
+        <Button variant="primary"   onClick={onScanAgain} className="flex-1">Take Another Photo</Button>
       </div>
     </div>
   );

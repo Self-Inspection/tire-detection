@@ -89,7 +89,7 @@ export default function SetupScreen({ onBeginScan }) {
 
   return (
     <div className="flex flex-col h-full safe-top safe-bottom px-6 py-6 overflow-y-auto">
-      <h2 className="text-2xl font-bold mb-1">Before You Scan</h2>
+      <h2 className="text-2xl font-bold mb-1">Get Ready</h2>
       <p className="text-gray-400 text-sm mb-5">Car tires · tread width ~{DEFAULT_TIRE_TYPE.treadWidthMm} mm</p>
 
       <div className="mt-4 bg-dark-card rounded-xl p-4">
@@ -118,13 +118,14 @@ export default function SetupScreen({ onBeginScan }) {
         <p className="text-xs text-gray-400 mt-2">
           Hold phone <span className="text-white">upright in portrait</span> — do not rotate sideways.
           Point at the tread from the side; grooves appear as <span className="text-white">vertical lines</span> in the blue box.
+          Tap <span className="text-white">Capture</span> when the tread fills the box.
         </p>
       </div>
 
       <div className="flex-1 min-h-4" />
 
       <Button variant="primary" onClick={handleBeginScan} fullWidth>
-        Begin Scan
+        Open Camera
       </Button>
     </div>
   );

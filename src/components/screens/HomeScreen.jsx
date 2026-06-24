@@ -3,7 +3,7 @@ import Button from '../ui/Button.jsx';
 
 const STEPS = [
   { icon: '🔍', text: 'Point rear camera at tire tread' },
-  { icon: '📱', text: 'Slowly sweep across the tire grooves' },
+  { icon: '📸', text: 'Fill the blue box and tap Capture' },
   { icon: '📊', text: 'Get instant tread depth & safety rating' }
 ];
 
@@ -35,7 +35,7 @@ export default function HomeScreen({ onCameraGranted }) {
         <div className="text-center">
           <div className="text-7xl mb-4">🔧</div>
           <h1 className="text-3xl font-bold">TireCheck</h1>
-          <p className="text-gray-400 mt-1">Tire tread depth scanner</p>
+          <p className="text-gray-400 mt-1">Measure tread depth from a photo</p>
         </div>
 
         <div className="space-y-3">
@@ -55,7 +55,7 @@ export default function HomeScreen({ onCameraGranted }) {
       </div>
 
       <Button variant="primary" onClick={startScan} loading={loading} fullWidth>
-        Start Scan
+        Get Started
       </Button>
       <p className="text-center text-gray-600 text-xs mt-3">
         {new Date(__BUILD_TIME__).toLocaleString()}

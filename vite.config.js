@@ -14,7 +14,7 @@ export default defineConfig(({ command }) => ({
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
-        name: 'TireCheck — Tread Depth Scanner',
+        name: 'TireCheck — Tread Depth',
         short_name: 'TireCheck',
         description: 'Measure tire tread depth using your phone camera',
         theme_color: '#1a1a2e',
