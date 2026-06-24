@@ -1,23 +1,16 @@
 import { useEffect, useState } from 'react';
 import { TIRE_TYPES } from '../../utils/depthToTread.js';
 import {
-  DEFAULT_OPENAI_MODEL,
   getDefaultSystemPrompt,
   loadScanConfig,
   saveScanConfig
 } from '../../utils/tireAnalysisPrompt.js';
 import Button from '../ui/Button.jsx';
 
-const MODEL_OPTIONS = [
-  { id: 'gpt-4o-mini', label: 'GPT-4o mini (faster, cheaper)' },
-  { id: 'gpt-4o', label: 'GPT-4o (more accurate)' }
-];
-
 export default function SetupScreen({ onBeginScan }) {
   const saved = loadScanConfig();
   const [selectedId, setSelectedId] = useState('car');
   const [apiKey, setApiKey] = useState(saved?.apiKey ?? '');
-  const [model, setModel] = useState(saved?.model ?? DEFAULT_OPENAI_MODEL);
   const [systemPrompt, setSystemPrompt] = useState(saved?.systemPrompt ?? getDefaultSystemPrompt());
   const [showPrompt, setShowPrompt] = useState(false);
   const [serverHasKey, setServerHasKey] = useState(null);
@@ -35,7 +28,6 @@ export default function SetupScreen({ onBeginScan }) {
     const config = {
       scanMode: 'chatgpt',
       apiKey: apiKey.trim(),
-      model,
       systemPrompt: systemPrompt.trim() || getDefaultSystemPrompt()
     };
     saveScanConfig(config);
@@ -86,19 +78,6 @@ export default function SetupScreen({ onBeginScan }) {
             autoComplete="off"
             className="w-full bg-dark-surface border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder:text-gray-500"
           />
-        </div>
-
-        <div>
-          <label className="text-sm font-semibold mb-1 block">Model</label>
-          <select
-            value={model}
-            onChange={e => setModel(e.target.value)}
-            className="w-full bg-dark-surface border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-white"
-          >
-            {MODEL_OPTIONS.map(m => (
-              <option key={m.id} value={m.id}>{m.label}</option>
-            ))}
-          </select>
         </div>
 
         <div>

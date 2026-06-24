@@ -17,7 +17,9 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
     scanResult,
     analysisError,
     isAnalyzing,
-    lastNotes
+    lastNotes,
+    attempt,
+    maxAttempts
   } = useChatGPTScanAnalysis({
     videoRef,
     isReady,
@@ -82,7 +84,7 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
       {isAnalyzing && !loading && (
         <div className="absolute top-16 left-0 right-0 flex justify-center z-10 pointer-events-none">
           <div className="bg-purple-700/90 rounded-full px-4 py-1.5 text-xs text-white">
-            Analyzing…
+            Analyzing photo…
           </div>
         </div>
       )}
@@ -97,9 +99,13 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
       {!loading && (
         <div className="absolute bottom-0 left-0 right-0 safe-bottom flex flex-col items-center pb-8 gap-2 z-10">
           <ProgressRing progress={progress} />
-          <p className="text-white/60 text-xs">Scanning tread…</p>
+          <p className="text-white/60 text-xs">
+            {isAnalyzing ? 'Sending one photo for analysis…' : 'Hold steady — one photo will be taken'}
+          </p>
           {lastNotes && (
-            <p className="text-white/40 text-[10px] px-6 text-center line-clamp-2">{lastNotes}</p>
+            <p className="text-white/40 text-[10px] px-6 text-center line-clamp-2">
+              {lastNotes}{attempt > 1 ? ` (attempt ${attempt}/${maxAttempts})` : ''}
+            </p>
           )}
         </div>
       )}

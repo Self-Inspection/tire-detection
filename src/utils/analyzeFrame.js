@@ -2,7 +2,6 @@ export async function analyzeTireFrame({
   imageBase64,
   systemPrompt,
   userPrompt,
-  model,
   apiKey
 }) {
   const headers = { 'Content-Type': 'application/json' };
@@ -15,7 +14,6 @@ export async function analyzeTireFrame({
       imageBase64,
       systemPrompt,
       userPrompt,
-      model,
       apiKey: apiKey || undefined
     })
   });

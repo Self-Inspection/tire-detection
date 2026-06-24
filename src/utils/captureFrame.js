@@ -3,7 +3,7 @@
  * Draws the center ROI bracket region to match on-screen guidance.
  */
 export function captureVideoFrame(videoElement, {
-  maxWidth = 640,
+  maxWidth = 480,
   roiX = 0.30,
   roiW = 0.40
 } = {}) {
@@ -25,5 +25,5 @@ export function captureVideoFrame(videoElement, {
   const ctx = canvas.getContext('2d');
   ctx.drawImage(videoElement, sx, 0, sw, vh, 0, 0, dw, dh);
 
-  return canvas.toDataURL('image/jpeg', 0.72);
+  return canvas.toDataURL('image/jpeg', 0.6);
 }

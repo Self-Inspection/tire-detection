@@ -1,27 +1,14 @@
 import { useState, useRef, useEffect } from 'react';
 import { captureVideoFrame } from '../utils/captureFrame.js';
 import { analyzeTireFrame } from '../utils/analyzeFrame.js';
-import {
-  buildUserPrompt,
-  getTargetDistanceCm
-} from '../utils/tireAnalysisPrompt.js';
-import {
-  parseChatGPTAnalysis,
-  isBlockedGuidance
-} from '../utils/parseChatGPTAnalysis.js';
-import { computeCV, estimateProgress } from '../utils/scanQuality.js';
-import { formatDepthResult, clamp32nds, getSafetyLevelFrom32nds, MM_PER_32ND } from '../utils/depthToTread.js';
+import { buildUserPrompt, getTargetDistanceCm } from '../utils/tireAnalysisPrompt.js';
+import { parseChatGPTAnalysis, isBlockedGuidance } from '../utils/parseChatGPTAnalysis.js';
+import { clamp32nds, getSafetyLevelFrom32nds, MM_PER_32ND } from '../utils/depthToTread.js';
 
-const MIN_FRAMES = 30;
-const TARGET_CV = 0.15;
-const STABLE_MS = 2000;
-const ANALYSIS_INTERVAL_MS = 2500;
-
-function medianOf(arr) {
-  const s = [...arr].sort((a, b) => a - b);
-  const m = Math.floor(s.length / 2);
-  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
-}
+// One photo → one API call. Retry only if framing is bad (max 3 attempts).
+const CAPTURE_DELAY_MS = 1200;
+const RETRY_DELAY_MS = 2000;
+const MAX_ATTEMPTS = 3;
 
 export default function useChatGPTScanAnalysis({
   videoRef,
@@ -36,14 +23,9 @@ export default function useChatGPTScanAnalysis({
   const [analysisError, setAnalysisError] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [lastNotes, setLastNotes] = useState('');
+  const [attempt, setAttempt] = useState(0);
 
-  const depthBuf = useRef([]);
-  const grooveBuf = useRef([]);
-  const acceptedBuf = useRef([]);
-  const stableStart = useRef(null);
   const running = useRef(false);
-  const inFlight = useRef(false);
-  const lastGuidanceRef = useRef(null);
   const tireTypeRef = useRef(tireType);
   const scanConfigRef = useRef(scanConfig);
 
@@ -55,26 +37,26 @@ export default function useChatGPTScanAnalysis({
 
     running.current = true;
     let timerId = null;
+    let attempts = 0;
 
-    async function runAnalysis() {
-      if (!running.current || inFlight.current) return;
+    async function analyzeOnce() {
+      if (!running.current) return;
 
       const video = videoRef.current;
       const config = scanConfigRef.current;
       if (!video || !config?.systemPrompt) return;
 
       const imageBase64 = captureVideoFrame(video);
-      if (!imageBase64) return;
+      if (!imageBase64) {
+        timerId = setTimeout(analyzeOnce, 500);
+        return;
+      }
 
-      const frames = acceptedBuf.current.filter(Boolean).length;
-      const recentDepths = depthBuf.current.slice(-30);
-      const cv = recentDepths.length >= 5 ? computeCV(recentDepths) : 1;
-      const grooveFraction = grooveBuf.current.slice(-30).reduce((a, b) => a + b, 0) /
-        Math.max(1, Math.min(30, grooveBuf.current.length));
-
-      inFlight.current = true;
+      attempts += 1;
+      setAttempt(attempts);
       setIsAnalyzing(true);
       setAnalysisError(null);
+      setProgress(0.3);
 
       try {
         const analysis = await analyzeTireFrame({
@@ -82,118 +64,89 @@ export default function useChatGPTScanAnalysis({
           systemPrompt: config.systemPrompt,
           userPrompt: buildUserPrompt({
             tireType: tireTypeRef.current,
-            lastGuidance: lastGuidanceRef.current,
-            acceptedFrames: frames,
-            recentCv: cv,
-            grooveFraction,
             targetDistanceCm: getTargetDistanceCm(tireTypeRef.current)
           }),
-          model: config.model,
           apiKey: config.apiKey || undefined
         });
 
         if (!running.current) return;
 
+        setProgress(0.85);
         const parsed = parseChatGPTAnalysis(analysis);
-        lastGuidanceRef.current = parsed.guidance;
         setGuidance(parsed.guidance);
         setLastNotes(parsed.notes);
 
-        grooveBuf.current.push(parsed.grooveVisible ? 1 : 0);
-        if (grooveBuf.current.length > 90) grooveBuf.current.shift();
+        const blocked = isBlockedGuidance(parsed.guidance) || parsed.guidance === 'tilt_phone';
 
-        if (parsed.acceptFrame && !isBlockedGuidance(parsed.guidance)) {
-          acceptedBuf.current.push(1);
-          if (acceptedBuf.current.length > 90) acceptedBuf.current.shift();
-          if (parsed.depthMm != null) {
-            depthBuf.current.push(parsed.depthMm);
-            if (depthBuf.current.length > 90) depthBuf.current.shift();
-          }
-        } else {
-          acceptedBuf.current.push(0);
-          if (acceptedBuf.current.length > 90) acceptedBuf.current.shift();
+        // Framing bad — retry up to MAX_ATTEMPTS
+        if (blocked && attempts < MAX_ATTEMPTS) {
+          setProgress(0.1);
+          setIsAnalyzing(false);
+          timerId = setTimeout(analyzeOnce, RETRY_DELAY_MS);
+          return;
         }
 
-        const updatedFrames = acceptedBuf.current.filter(Boolean).length;
-        const updatedRecentDepths = depthBuf.current.slice(-30);
-        const updatedCv = updatedRecentDepths.length >= 5
-          ? computeCV(updatedRecentDepths)
-          : (updatedFrames >= MIN_FRAMES ? 0.1 : 1);
-        const updatedGrooveFraction = grooveBuf.current.slice(-30).reduce((a, b) => a + b, 0) /
-          Math.max(1, Math.min(30, grooveBuf.current.length));
+        if (blocked) {
+          setAnalysisError(parsed.notes || 'Could not read tread. Adjust angle and try again.');
+          setIsAnalyzing(false);
+          return;
+        }
 
-        setProgress(
-          estimateProgress(updatedFrames, updatedCv, updatedGrooveFraction, MIN_FRAMES)
-        );
+        // Accept measurement from this single frame
+        let depth32nds = parsed.depth32nds;
+        let depthMm = parsed.depthMm;
 
-        const stable = updatedFrames >= MIN_FRAMES
-          && updatedCv < TARGET_CV
-          && updatedGrooveFraction >= 0.8
-          && !isBlockedGuidance(parsed.guidance);
-
-        const modelReady = parsed.readyToComplete && stable;
-
-        if (modelReady) {
-          if (!stableStart.current) stableStart.current = performance.now();
-          else if (performance.now() - stableStart.current >= STABLE_MS) {
-            const medianDepth = updatedRecentDepths.length > 0
-              ? medianOf(updatedRecentDepths)
-              : parsed.depthMm;
-
-            if (medianDepth == null) {
-              stableStart.current = null;
-              return;
-            }
-
-            let depth32nds;
-            let depthMm;
-
-            if (parsed.depth32nds != null) {
-              depth32nds = clamp32nds(parsed.depth32nds);
-              depthMm = parseFloat((depth32nds * MM_PER_32ND).toFixed(1));
-            } else {
-              const formatted = formatDepthResult(medianDepth);
-              depth32nds = formatted.depth32nds;
-              depthMm = formatted.depthMm;
-            }
-
-            setScanResult({
-              depthMm,
-              depth32nds,
-              rating: getSafetyLevelFrom32nds(depth32nds),
-              source: 'chatgpt',
-              confidence: parsed.confidence,
-              notes: parsed.notes
-            });
-            setProgress(1);
-            setIsComplete(true);
-            running.current = false;
+        if (depth32nds == null && depthMm != null) {
+          depth32nds = clamp32nds(Math.round(depthMm / MM_PER_32ND));
+        }
+        if (depth32nds == null) {
+          if (attempts < MAX_ATTEMPTS) {
+            setIsAnalyzing(false);
+            timerId = setTimeout(analyzeOnce, RETRY_DELAY_MS);
             return;
           }
-        } else {
-          stableStart.current = null;
+          setAnalysisError('Could not measure tread depth. Try better lighting or move closer.');
+          setIsAnalyzing(false);
+          return;
         }
+
+        depth32nds = clamp32nds(depth32nds);
+        depthMm = depthMm ?? parseFloat((depth32nds * MM_PER_32ND).toFixed(1));
+
+        setScanResult({
+          depthMm,
+          depth32nds,
+          rating: getSafetyLevelFrom32nds(depth32nds),
+          source: 'chatgpt',
+          confidence: parsed.confidence,
+          notes: parsed.notes
+        });
+        setProgress(1);
+        setIsComplete(true);
+        running.current = false;
       } catch (err) {
-        if (running.current) {
-          setAnalysisError(err.message || 'ChatGPT analysis failed');
-          setGuidance('tilt_phone');
+        if (!running.current) return;
+        if (attempts < MAX_ATTEMPTS) {
+          setIsAnalyzing(false);
+          timerId = setTimeout(analyzeOnce, RETRY_DELAY_MS);
+          return;
         }
+        setAnalysisError(err.message || 'Analysis failed');
+        setGuidance('tilt_phone');
       } finally {
-        inFlight.current = false;
         setIsAnalyzing(false);
-        if (running.current) {
-          timerId = setTimeout(runAnalysis, ANALYSIS_INTERVAL_MS);
-        }
       }
     }
 
-    timerId = setTimeout(runAnalysis, 500);
+    setGuidance('keep_going');
+    setLastNotes('Point camera at tread in the bracket…');
+    timerId = setTimeout(analyzeOnce, CAPTURE_DELAY_MS);
 
     return () => {
       running.current = false;
       if (timerId) clearTimeout(timerId);
     };
-  }, [isReady, scanConfig?.systemPrompt, scanConfig?.apiKey, scanConfig?.model, videoRef]);
+  }, [isReady, scanConfig?.systemPrompt, scanConfig?.apiKey, videoRef]);
 
   return {
     guidance,
@@ -202,6 +155,8 @@ export default function useChatGPTScanAnalysis({
     scanResult,
     analysisError,
     isAnalyzing,
-    lastNotes
+    lastNotes,
+    attempt,
+    maxAttempts: MAX_ATTEMPTS
   };
 }

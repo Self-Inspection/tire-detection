@@ -9,7 +9,7 @@ const isProd = process.env.NODE_ENV === 'production';
 
 app.use(express.json({ limit: '12mb' }));
 
-const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
 
 function resolveApiKey(bodyKey, headerKey) {
   return process.env.OPENAI_API_KEY || bodyKey || headerKey || null;
@@ -37,7 +37,7 @@ app.get('/api/health', (_req, res) => {
   res.json({
     ok: true,
     hasServerKey: Boolean(process.env.OPENAI_API_KEY),
-    model: DEFAULT_MODEL
+    model: OPENAI_MODEL
   });
 });
 
@@ -46,7 +46,6 @@ app.post('/api/analyze-frame', async (req, res) => {
     imageBase64,
     systemPrompt,
     userPrompt,
-    model,
     apiKey: bodyApiKey
   } = req.body ?? {};
 
@@ -74,7 +73,7 @@ app.post('/api/analyze-frame', async (req, res) => {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: model || DEFAULT_MODEL,
+        model: OPENAI_MODEL,
         temperature: 0.2,
         response_format: { type: 'json_object' },
         messages: [
