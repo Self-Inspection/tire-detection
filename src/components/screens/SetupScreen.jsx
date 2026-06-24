@@ -6,6 +6,72 @@ import {
   saveScanConfig
 } from '../../utils/tireAnalysisPrompt.js';
 import Button from '../ui/Button.jsx';
+import { SCAN_ROI } from '../../utils/scanRoi.js';
+
+/** Phone screen rect inside the setup illustration SVG (viewBox 0 0 120 200). */
+const PHONE_SCREEN = { x: 34, y: 22, w: 52, h: 140 };
+
+function setupBracketRect() {
+  return {
+    x: PHONE_SCREEN.x + PHONE_SCREEN.w * SCAN_ROI.x,
+    y: PHONE_SCREEN.y + PHONE_SCREEN.h * SCAN_ROI.y,
+    w: PHONE_SCREEN.w * SCAN_ROI.w,
+    h: PHONE_SCREEN.h * SCAN_ROI.h
+  };
+}
+
+function SetupIllustration({ distanceLabel }) {
+  const bracket = setupBracketRect();
+  const treadX = PHONE_SCREEN.x + 4;
+  const treadW = PHONE_SCREEN.w - 8;
+  const treadY = PHONE_SCREEN.y + 6;
+  const treadH = PHONE_SCREEN.h - 12;
+  const grooveCount = 9;
+
+  return (
+    <svg viewBox="0 0 120 200" className="h-48 w-auto" xmlns="http://www.w3.org/2000/svg">
+      {/* Phone body — portrait */}
+      <rect x="28" y="8" width="64" height="168" rx="10" fill="#1a1a2e" stroke="#555" strokeWidth="2" />
+      <rect x={PHONE_SCREEN.x} y={PHONE_SCREEN.y} width={PHONE_SCREEN.w} height={PHONE_SCREEN.h} rx="2" fill="#111" />
+      <circle cx="60" cy="16" r="3" fill="#333" />
+
+      {/* Tread seen through camera — grooves run top-to-bottom in portrait */}
+      <rect x={treadX} y={treadY} width={treadW} height={treadH} fill="#2a2a2a" />
+      {Array.from({ length: grooveCount }, (_, i) => {
+        const colW = treadW / grooveCount;
+        const x = treadX + i * colW;
+        const isGroove = i % 2 === 0;
+        return (
+          <rect
+            key={i}
+            x={x}
+            y={treadY}
+            width={colW}
+            height={treadH}
+            fill={isGroove ? '#141414' : '#4a4a4a'}
+          />
+        );
+      })}
+
+      {/* Scan bracket — synced with live scanner ROI */}
+      <rect
+        x={bracket.x}
+        y={bracket.y}
+        width={bracket.w}
+        height={bracket.h}
+        rx="3"
+        fill="none"
+        stroke="#3b82f6"
+        strokeWidth="2"
+        strokeDasharray="6,3"
+      />
+
+      <text x="60" y="192" fill="#3b82f6" fontSize="8" textAnchor="middle" fontFamily="sans-serif">
+        Portrait · {distanceLabel}
+      </text>
+    </svg>
+  );
+}
 
 export default function SetupScreen({ onBeginScan }) {
   const saved = loadScanConfig();
@@ -71,35 +137,11 @@ export default function SetupScreen({ onBeginScan }) {
       <div className="mt-5 bg-dark-card rounded-xl p-4">
         <p className="text-sm font-semibold mb-2">How to position your phone</p>
         <div className="relative bg-gray-800 rounded-lg overflow-hidden flex justify-center py-4" style={{ minHeight: 200 }}>
-          <svg viewBox="0 0 120 200" className="h-48 w-auto" xmlns="http://www.w3.org/2000/svg">
-            {/* Phone body — portrait */}
-            <rect x="28" y="8" width="64" height="168" rx="10" fill="#1a1a2e" stroke="#555" strokeWidth="2" />
-            <rect x="34" y="22" width="52" height="140" rx="2" fill="#111" />
-            {/* Camera notch hint */}
-            <circle cx="60" cy="16" r="3" fill="#333" />
-
-            {/* Tread: repeating blocks and grooves */}
-            <rect x="34" y="22" width="52" height="140" fill="#2a2a2a" />
-            {[0, 1, 2, 3, 4, 5, 6].map(i => (
-              <g key={i}>
-                <rect x="38" y={28 + i * 18} width="44" height="10" rx="1" fill="#444" />
-                <rect x="38" y={38 + i * 18} width="44" height="4" fill="#1a1a1a" />
-              </g>
-            ))}
-
-            {/* Scan bracket — wide band (matches live scanner) */}
-            <rect x="37" y="52" width="46" height="78" rx="3" fill="none" stroke="#3b82f6"
-                  strokeWidth="2" strokeDasharray="6,3" />
-
-            {/* Portrait label */}
-            <text x="60" y="192" fill="#3b82f6" fontSize="8" textAnchor="middle" fontFamily="sans-serif">
-              Portrait · {selected.id === 'motorcycle' ? '20–30' : '30–40'} cm
-            </text>
-          </svg>
+          <SetupIllustration distanceLabel={selected.id === 'motorcycle' ? '20–30 cm' : '30–40 cm'} />
         </div>
         <p className="text-xs text-gray-400 mt-2">
           Hold phone <span className="text-white">upright in portrait</span> — do not rotate sideways.
-          Fill the blue box with tread — move closer until grooves fill most of the bracket.
+          Point at the tread from the side; grooves appear as <span className="text-white">vertical lines</span> in the blue box.
         </p>
       </div>
 
