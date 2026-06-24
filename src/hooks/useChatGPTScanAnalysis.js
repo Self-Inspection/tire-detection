@@ -63,7 +63,7 @@ export default function useChatGPTScanAnalysis({
         systemPrompt: config.systemPrompt,
         userPrompt: buildUserPrompt({
           tireType: tireTypeRef.current,
-          targetDistanceCm: getTargetDistanceCm(tireTypeRef.current)
+          targetDistanceCm: getTargetDistanceCm()
         })
       });
 

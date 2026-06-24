@@ -1,7 +1,8 @@
 import {
   getSafetyLevelFrom32nds,
   clamp32nds,
-  MM_PER_32ND
+  MM_PER_32ND,
+  MAX_GROOVES
 } from './depthToTread.js';
 import { GUIDANCE_VALUES } from './tireAnalysisPrompt.js';
 
@@ -36,6 +37,8 @@ function parseGrooves(raw) {
   if (!Array.isArray(raw.grooves)) return [];
   return raw.grooves
     .filter(g => g && typeof g.depth_32nds === 'number')
+    .sort((a, b) => (a.id ?? 0) - (b.id ?? 0))
+    .slice(0, MAX_GROOVES)
     .map(formatGroove);
 }
 

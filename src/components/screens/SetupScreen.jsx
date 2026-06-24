@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { TIRE_TYPES } from '../../utils/depthToTread.js';
+import { DEFAULT_TIRE_TYPE } from '../../utils/depthToTread.js';
 import {
   getDefaultSystemPrompt,
   loadScanConfig,
@@ -20,13 +20,13 @@ function setupBracketRect() {
   };
 }
 
-function SetupIllustration({ distanceLabel }) {
+function SetupIllustration() {
   const bracket = setupBracketRect();
   const treadX = PHONE_SCREEN.x + 4;
   const treadW = PHONE_SCREEN.w - 8;
   const treadY = PHONE_SCREEN.y + 6;
   const treadH = PHONE_SCREEN.h - 12;
-  const grooveCount = 9;
+  const grooveCount = 7;
 
   return (
     <svg viewBox="0 0 120 200" className="h-48 w-auto" xmlns="http://www.w3.org/2000/svg">
@@ -67,7 +67,7 @@ function SetupIllustration({ distanceLabel }) {
       />
 
       <text x="60" y="192" fill="#3b82f6" fontSize="8" textAnchor="middle" fontFamily="sans-serif">
-        Portrait · {distanceLabel}
+        Portrait · 30–40 cm
       </text>
     </svg>
   );
@@ -75,11 +75,8 @@ function SetupIllustration({ distanceLabel }) {
 
 export default function SetupScreen({ onBeginScan }) {
   const saved = loadScanConfig();
-  const [selectedId, setSelectedId] = useState('car');
   const [systemPrompt, setSystemPrompt] = useState(saved?.systemPrompt ?? getDefaultSystemPrompt());
   const [showPrompt, setShowPrompt] = useState(false);
-
-  const selected = TIRE_TYPES.find(t => t.id === selectedId);
 
   function handleBeginScan() {
     const config = {
@@ -87,34 +84,13 @@ export default function SetupScreen({ onBeginScan }) {
       systemPrompt: systemPrompt.trim() || getDefaultSystemPrompt()
     };
     saveScanConfig(config);
-    onBeginScan(selected, config);
+    onBeginScan(DEFAULT_TIRE_TYPE, config);
   }
 
   return (
     <div className="flex flex-col h-full safe-top safe-bottom px-6 py-6 overflow-y-auto">
-      <h2 className="text-2xl font-bold mb-1">Select Tire Type</h2>
-      <p className="text-gray-400 text-sm mb-5">Used to set reference dimensions for accurate measurement</p>
-
-      <div className="space-y-3">
-        {TIRE_TYPES.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setSelectedId(t.id)}
-            style={{ touchAction: 'manipulation' }}
-            className={`w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-colors text-left
-              ${selectedId === t.id
-                ? 'border-blue-500 bg-blue-500/10'
-                : 'border-dark-card bg-dark-card'}`}
-          >
-            <span className="text-3xl shrink-0">{t.icon}</span>
-            <div className="flex-1">
-              <p className="font-semibold">{t.label}</p>
-              <p className="text-xs text-gray-400">Tread width ~{t.treadWidthMm} mm</p>
-            </div>
-            {selectedId === t.id && <span className="text-blue-400 text-lg">✓</span>}
-          </button>
-        ))}
-      </div>
+      <h2 className="text-2xl font-bold mb-1">Before You Scan</h2>
+      <p className="text-gray-400 text-sm mb-5">Car tires · tread width ~{DEFAULT_TIRE_TYPE.treadWidthMm} mm</p>
 
       <div className="mt-4 bg-dark-card rounded-xl p-4">
         <button
@@ -137,7 +113,7 @@ export default function SetupScreen({ onBeginScan }) {
       <div className="mt-5 bg-dark-card rounded-xl p-4">
         <p className="text-sm font-semibold mb-2">How to position your phone</p>
         <div className="relative bg-gray-800 rounded-lg overflow-hidden flex justify-center py-4" style={{ minHeight: 200 }}>
-          <SetupIllustration distanceLabel={selected.id === 'motorcycle' ? '20–30 cm' : '30–40 cm'} />
+          <SetupIllustration />
         </div>
         <p className="text-xs text-gray-400 mt-2">
           Hold phone <span className="text-white">upright in portrait</span> — do not rotate sideways.

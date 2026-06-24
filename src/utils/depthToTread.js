@@ -7,10 +7,11 @@ export const MIN_TREAD_32NDS = 2;
 export const MAX_TREAD_32NDS = 10;
 
 export const TIRE_TYPES = [
-  { id: 'car',        label: 'Car',          icon: '🚗', treadWidthMm: 190 },
-  { id: 'truck',      label: 'Truck / SUV',  icon: '🚙', treadWidthMm: 230 },
-  { id: 'motorcycle', label: 'Motorcycle',   icon: '🏍️', treadWidthMm: 130 }
+  { id: 'car', label: 'Car', icon: '🚗', treadWidthMm: 190 }
 ];
+
+export const DEFAULT_TIRE_TYPE = TIRE_TYPES[0];
+export const MAX_GROOVES = 4;
 
 // Rating bands match standard tread depth chart (32nds):
 // 8–10/32" = GOOD, 4–7/32" = OKAY, 3/32" = BAD, 2/32" = legal limit

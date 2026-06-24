@@ -1,3 +1,5 @@
+import { MAX_GROOVES } from './depthToTread.js';
+
 export const OPENAI_MODEL = 'gpt-4o';
 
 export const GUIDANCE_VALUES = [
@@ -22,7 +24,7 @@ Identify EACH visible groove in the image and estimate its remaining depth indiv
 ## Analysis steps
 1. Confirm repeating tread blocks and grooves are visible. If not → guidance: tilt_phone, grooves: [].
 2. Check framing: too_far, too_close, or blur → appropriate guidance.
-3. Scan across the image along the groove direction. For each distinct groove channel you can see:
+3. Scan across the image along the groove direction. Measure up to ${MAX_GROOVES} distinct groove channels (pick the clearest). For each:
    - Assign id (1, 2, 3… in order along the groove direction)
    - Assign position: "far-left" | "left" | "center-left" | "center" | "center-right" | "right" | "far-right" (or top/bottom equivalents if grooves run vertically)
    - Estimate depth_32nds (integer 2–10) by comparing groove bottom to adjacent block height
@@ -69,7 +71,7 @@ Return ONLY JSON:
 }
 
 Rules:
-- grooves array must list every groove you can distinguish (typically 3–8 visible in frame).
+- grooves array must list up to ${MAX_GROOVES} distinct grooves (the clearest ones in frame). Do not return more than ${MAX_GROOVES}.
 - depth_mm = depth_32nds × 0.794 for each groove.
 - measurement.depth_32nds = min of all groove depth_32nds values.
 - If no grooves measurable, return grooves: [] and null measurement.
@@ -79,7 +81,7 @@ Rules:
 }
 
 export function buildUserPrompt({ tireType, targetDistanceCm }) {
-  return `Find each visible tread groove and measure depth for each one. Grooves may run horizontally or vertically in the image.
+  return `Find up to ${MAX_GROOVES} visible tread grooves and measure depth for each one. Grooves may run horizontally or vertically in the image.
 
 Tire type: ${tireType?.label ?? 'car'} (tread width ~${tireType?.treadWidthMm ?? 190} mm)
 Camera distance: ${targetDistanceCm} cm, portrait orientation.
@@ -100,6 +102,6 @@ export function saveScanConfig(config) {
   sessionStorage.setItem(SCAN_CONFIG_STORAGE_KEY, JSON.stringify(config));
 }
 
-export function getTargetDistanceCm(tireType) {
-  return tireType?.id === 'motorcycle' ? '20-30' : '30-40';
+export function getTargetDistanceCm() {
+  return '30-40';
 }

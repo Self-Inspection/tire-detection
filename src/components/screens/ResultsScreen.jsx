@@ -1,5 +1,6 @@
 import Badge from '../ui/Badge.jsx';
 import Button from '../ui/Button.jsx';
+import { MAX_GROOVES } from '../../utils/depthToTread.js';
 
 const RECOMMENDATIONS = {
   good:   'Your tires are in good condition (8/32″ or more). Check again in 6 months.',
@@ -24,7 +25,8 @@ const REFERENCE = [
 
 export default function ResultsScreen({ result, onScanAgain, onDone }) {
   if (!result) return null;
-  const { depthMm, depth32nds, rating, grooves = [] } = result;
+  const { depthMm, depth32nds, rating, grooves: rawGrooves = [] } = result;
+  const grooves = rawGrooves.slice(0, MAX_GROOVES);
 
   const alertBorder = {
     good:   'bg-green-900/20 border-green-500/30',
@@ -53,7 +55,7 @@ export default function ResultsScreen({ result, onScanAgain, onDone }) {
 
       {grooves.length > 0 && (
         <div className="bg-dark-card rounded-xl p-4 mt-4">
-          <p className="text-xs font-semibold text-gray-400 mb-3">Per-groove depth</p>
+          <p className="text-xs font-semibold text-gray-400 mb-3">Per-groove depth (up to {MAX_GROOVES})</p>
           <div className="space-y-2">
             {grooves.map(g => (
               <div key={g.id} className="flex items-center justify-between text-sm py-1.5 border-b border-gray-800 last:border-0">
