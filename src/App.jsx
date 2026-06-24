@@ -7,6 +7,7 @@ import ResultsScreen from './components/screens/ResultsScreen.jsx';
 const initialState = {
   screen: 'home',
   tireType: null,
+  scanConfig: null,
   scanResult: null
 };
 
@@ -15,7 +16,7 @@ function reducer(state, action) {
     case 'CAMERA_GRANTED':
       return { ...state, screen: 'setup' };
     case 'BEGIN_SCAN':
-      return { ...state, screen: 'scanning', tireType: action.tireType };
+      return { ...state, screen: 'scanning', tireType: action.tireType, scanConfig: action.scanConfig };
     case 'SCAN_COMPLETE':
       return { ...state, screen: 'results', scanResult: action.result };
     case 'SCAN_AGAIN':
@@ -36,11 +37,12 @@ export default function App() {
         <HomeScreen onCameraGranted={() => dispatch({ type: 'CAMERA_GRANTED' })} />
       )}
       {state.screen === 'setup' && (
-        <SetupScreen onBeginScan={(tireType) => dispatch({ type: 'BEGIN_SCAN', tireType })} />
+        <SetupScreen onBeginScan={(tireType, scanConfig) => dispatch({ type: 'BEGIN_SCAN', tireType, scanConfig })} />
       )}
       {state.screen === 'scanning' && (
         <ScannerScreen
           tireType={state.tireType}
+          scanConfig={state.scanConfig}
           onComplete={(result) => dispatch({ type: 'SCAN_COMPLETE', result })}
           onCancel={() => dispatch({ type: 'SCAN_AGAIN' })}
         />

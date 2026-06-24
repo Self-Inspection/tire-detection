@@ -35,7 +35,13 @@ export default defineConfig(({ command }) => ({
     })
   ].filter(Boolean),
   server: {
-    host: true
+    host: true,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true
+      }
+    }
   },
   preview: {
     host: true,

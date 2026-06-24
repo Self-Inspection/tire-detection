@@ -12,13 +12,14 @@ function withTimeout(promise, ms, label) {
   ]);
 }
 
-export default function useDepthModel() {
-  const [isModelLoaded, setIsModelLoaded] = useState(false);
+export default function useDepthModel({ enabled = true } = {}) {
+  const [isModelLoaded, setIsModelLoaded] = useState(!enabled);
   const [modelError, setModelError]       = useState(null);
   const estimatorRef    = useRef(null);
   const lastFrameRef    = useRef(0);
 
   useEffect(() => {
+    if (!enabled) return;
     let active = true;
 
     async function load() {
@@ -56,7 +57,7 @@ export default function useDepthModel() {
 
     load();
     return () => { active = false; };
-  }, []);
+  }, [enabled]);
 
   const estimateDepth = useCallback(async (videoElement) => {
     if (!estimatorRef.current || !videoElement) return null;

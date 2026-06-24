@@ -1,34 +1,36 @@
 import { useRef, useEffect, useState } from 'react';
 import useCamera from '../../hooks/useCamera.js';
-import useDepthModel from '../../hooks/useDepthModel.js';
-import useWebXR from '../../hooks/useWebXR.js';
-import useScanAnalysis from '../../hooks/useScanAnalysis.js';
+import useChatGPTScanAnalysis from '../../hooks/useChatGPTScanAnalysis.js';
 import GuidanceOverlay from '../ui/GuidanceOverlay.jsx';
 import ProgressRing from '../ui/ProgressRing.jsx';
-import DepthHeatmap from '../ui/DepthHeatmap.jsx';
 
-export default function ScannerScreen({ tireType, onComplete, onCancel }) {
+export default function ScannerScreen({ tireType, scanConfig, onComplete, onCancel }) {
   const videoRef = useRef(null);
   const [showConfirm, setShowConfirm] = useState(false);
 
-  const { error: cameraError, isReady }        = useCamera(videoRef);
-  const { estimateDepth, isModelLoaded, modelError } = useDepthModel();
-  const { metricsScaleFactor }                 = useWebXR();
+  const { error: cameraError, isReady } = useCamera(videoRef);
 
-  const { guidance, progress, isComplete, scanResult, depthMap } = useScanAnalysis({
+  const {
+    guidance,
+    progress,
+    isComplete,
+    scanResult,
+    analysisError,
+    isAnalyzing,
+    lastNotes
+  } = useChatGPTScanAnalysis({
     videoRef,
-    estimateDepth,
-    isModelLoaded,
+    isReady,
     tireType,
-    metricsScaleFactor
+    scanConfig
   });
 
-  // Fire completion callback once
+  const activeError = cameraError || analysisError;
+
   useEffect(() => {
     if (isComplete && scanResult) onComplete(scanResult);
   }, [isComplete, scanResult]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Screen wake lock — keeps display on during scan
   useEffect(() => {
     let lock = null;
     navigator.wakeLock?.request('screen')
@@ -37,7 +39,6 @@ export default function ScannerScreen({ tireType, onComplete, onCancel }) {
     return () => { lock?.release(); };
   }, []);
 
-  // Android back-button: intercept and show confirm dialog
   useEffect(() => {
     history.pushState(null, '', window.location.href);
     const onPop = () => {
@@ -48,11 +49,10 @@ export default function ScannerScreen({ tireType, onComplete, onCancel }) {
     return () => window.removeEventListener('popstate', onPop);
   }, []);
 
-  const loading = !isReady ? 'Accessing camera…' : !isModelLoaded ? 'Loading depth model…' : null;
+  const loading = !isReady ? 'Accessing camera…' : null;
 
   return (
     <div className="relative w-full h-full bg-black">
-      {/* Live camera feed */}
       <video
         ref={videoRef}
         autoPlay
@@ -61,10 +61,6 @@ export default function ScannerScreen({ tireType, onComplete, onCancel }) {
         className="absolute inset-0 w-full h-full object-cover"
       />
 
-      {/* Depth heatmap overlay */}
-      {depthMap && <DepthHeatmap depthMap={depthMap} />}
-
-      {/* Loading spinner */}
       {loading && (
         <div className="absolute inset-0 bg-black/75 flex flex-col items-center justify-center gap-4 z-20">
           <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
@@ -72,20 +68,25 @@ export default function ScannerScreen({ tireType, onComplete, onCancel }) {
         </div>
       )}
 
-      {/* Error state — show even while spinner is up so timeout errors surface */}
-      {(cameraError || modelError) && (
+      {activeError && (
         <div className="absolute inset-0 bg-black/80 flex items-center justify-center p-6 z-20">
           <div className="bg-dark-card rounded-xl p-6 text-center max-w-xs">
-            <p className="text-red-400 mb-4 text-sm">{cameraError || modelError}</p>
+            <p className="text-red-400 mb-4 text-sm">{activeError}</p>
             <button onClick={onCancel} className="text-blue-400 text-sm underline">Go Back</button>
           </div>
         </div>
       )}
 
-      {/* Guidance pill */}
       <GuidanceOverlay guidance={guidance} />
 
-      {/* ROI bracket overlay */}
+      {isAnalyzing && !loading && (
+        <div className="absolute top-16 left-0 right-0 flex justify-center z-10 pointer-events-none">
+          <div className="bg-purple-700/90 rounded-full px-4 py-1.5 text-xs text-white">
+            Analyzing…
+          </div>
+        </div>
+      )}
+
       {!loading && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="border-2 border-blue-400/60 rounded-lg"
@@ -93,15 +94,16 @@ export default function ScannerScreen({ tireType, onComplete, onCancel }) {
         </div>
       )}
 
-      {/* Progress ring at bottom */}
       {!loading && (
         <div className="absolute bottom-0 left-0 right-0 safe-bottom flex flex-col items-center pb-8 gap-2 z-10">
           <ProgressRing progress={progress} />
           <p className="text-white/60 text-xs">Scanning tread…</p>
+          {lastNotes && (
+            <p className="text-white/40 text-[10px] px-6 text-center line-clamp-2">{lastNotes}</p>
+          )}
         </div>
       )}
 
-      {/* Cancel button */}
       {!loading && (
         <div className="absolute top-0 right-0 safe-top p-4 z-10">
           <button
@@ -114,7 +116,6 @@ export default function ScannerScreen({ tireType, onComplete, onCancel }) {
         </div>
       )}
 
-      {/* Cancel confirmation */}
       {showConfirm && (
         <div className="absolute inset-0 bg-black/60 flex items-center justify-center p-6 z-30">
           <div className="bg-dark-card rounded-xl p-6 w-full max-w-xs text-center">
