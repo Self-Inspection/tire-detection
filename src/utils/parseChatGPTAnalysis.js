@@ -1,7 +1,57 @@
-import { getSafetyLevelFrom32nds, clamp32nds } from './depthToTread.js';
+import {
+  getSafetyLevelFrom32nds,
+  clamp32nds,
+  MM_PER_32ND
+} from './depthToTread.js';
 import { GUIDANCE_VALUES } from './tireAnalysisPrompt.js';
 
 const BLOCKED_GUIDANCE = new Set(['move_slower', 'too_far', 'too_close', 'tilt_phone']);
+
+const POSITION_LABELS = {
+  'far-left': 'Far left',
+  left: 'Left',
+  'center-left': 'Center left',
+  center: 'Center',
+  'center-right': 'Center right',
+  right: 'Right',
+  'far-right': 'Far right'
+};
+
+function formatGroove(g, index) {
+  const depth32nds = clamp32nds(g.depth_32nds);
+  return {
+    id: g.id ?? index + 1,
+    position: g.position ?? 'center',
+    positionLabel: POSITION_LABELS[g.position] ?? g.position ?? `Groove ${index + 1}`,
+    depth32nds,
+    depthMm: typeof g.depth_mm === 'number'
+      ? parseFloat(g.depth_mm.toFixed(1))
+      : parseFloat((depth32nds * MM_PER_32ND).toFixed(1)),
+    rating: getSafetyLevelFrom32nds(depth32nds),
+    confidence: typeof g.confidence === 'number' ? g.confidence : null
+  };
+}
+
+function parseGrooves(raw) {
+  if (!Array.isArray(raw.grooves)) return [];
+  return raw.grooves
+    .filter(g => g && typeof g.depth_32nds === 'number')
+    .map(formatGroove);
+}
+
+function summaryFromGrooves(grooves) {
+  if (grooves.length === 0) return null;
+  const shallowest = grooves.reduce((min, g) =>
+    g.depth32nds < min.depth32nds ? g : min
+  );
+  const avgConfidence = grooves.reduce((s, g) => s + (g.confidence ?? 0.7), 0) / grooves.length;
+  return {
+    depth32nds: shallowest.depth32nds,
+    depthMm: shallowest.depthMm,
+    rating: shallowest.rating,
+    confidence: avgConfidence
+  };
+}
 
 export function normalizeGuidance(value) {
   if (GUIDANCE_VALUES.includes(value)) return value;
@@ -15,6 +65,7 @@ export function parseChatGPTAnalysis(raw) {
       acceptFrame: false,
       depthMm: null,
       depth32nds: null,
+      grooves: [],
       readyToComplete: false,
       confidence: 0,
       notes: 'Invalid analysis response',
@@ -24,29 +75,41 @@ export function parseChatGPTAnalysis(raw) {
 
   const guidance = normalizeGuidance(raw.guidance);
   const grooveVisible = raw.frame_quality?.groove_visible !== false;
+  const grooves = parseGrooves(raw);
 
-  const depth32nds = typeof raw.measurement?.depth_32nds === 'number'
+  let depth32nds = typeof raw.measurement?.depth_32nds === 'number'
     ? clamp32nds(raw.measurement.depth_32nds)
     : null;
-
-  const depthMm = typeof raw.measurement?.depth_mm === 'number'
+  let depthMm = typeof raw.measurement?.depth_mm === 'number'
     ? raw.measurement.depth_mm
     : null;
+
+  const grooveSummary = summaryFromGrooves(grooves);
+  if (grooveSummary) {
+    depth32nds = grooveSummary.depth32nds;
+    depthMm = grooveSummary.depthMm;
+  }
 
   const rating = raw.measurement?.rating && raw.measurement.rating !== 'null'
     ? raw.measurement.rating
     : (depth32nds != null ? getSafetyLevelFrom32nds(depth32nds) : null);
 
+  const confidence = typeof raw.confidence === 'number'
+    ? raw.confidence
+    : (grooveSummary?.confidence ?? 0);
+
   return {
     guidance,
-    acceptFrame: grooveVisible && depth32nds != null,
+    acceptFrame: grooveVisible && grooves.length > 0,
     depthMm,
     depth32nds,
+    grooves,
     rating,
-    readyToComplete: depth32nds != null,
-    confidence: typeof raw.confidence === 'number' ? raw.confidence : 0,
+    readyToComplete: grooves.length > 0,
+    confidence,
     notes: raw.notes || '',
-    grooveVisible
+    grooveVisible,
+    grooveCount: grooves.length
   };
 }
 

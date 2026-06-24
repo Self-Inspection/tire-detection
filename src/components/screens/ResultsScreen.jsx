@@ -8,16 +8,23 @@ const RECOMMENDATIONS = {
   danger: 'REPLACE IMMEDIATELY. At the legal minimum of 2/32″. Unsafe in rain.'
 };
 
+const RATING_CLS = {
+  good:   'text-tire-good',
+  fair:   'text-tire-fair',
+  poor:   'text-tire-poor',
+  danger: 'text-tire-danger'
+};
+
 const REFERENCE = [
-  { label: 'Good',             value: '8–10/32″',  cls: 'text-tire-good' },
-  { label: 'Okay',             value: '4–7/32″',   cls: 'text-tire-fair' },
-  { label: 'Bad',              value: '3/32″',     cls: 'text-tire-poor' },
-  { label: 'Legal limit',      value: '2/32″',     cls: 'text-tire-danger' }
+  { label: 'Good',        value: '8–10/32″', cls: 'text-tire-good' },
+  { label: 'Okay',        value: '4–7/32″',  cls: 'text-tire-fair' },
+  { label: 'Bad',         value: '3/32″',    cls: 'text-tire-poor' },
+  { label: 'Legal limit', value: '2/32″',    cls: 'text-tire-danger' }
 ];
 
 export default function ResultsScreen({ result, onScanAgain, onDone }) {
   if (!result) return null;
-  const { depthMm, depth32nds, rating } = result;
+  const { depthMm, depth32nds, rating, grooves = [] } = result;
 
   const alertBorder = {
     good:   'bg-green-900/20 border-green-500/30',
@@ -30,16 +37,40 @@ export default function ResultsScreen({ result, onScanAgain, onDone }) {
     <div className="flex flex-col h-full safe-top safe-bottom px-6 py-6 overflow-y-auto">
       <h2 className="text-2xl font-bold mb-5">Scan Results</h2>
 
-      <div className="bg-dark-card rounded-2xl p-8 text-center mb-4">
-        <p className="text-gray-400 text-sm mb-2">Tread Depth</p>
+      <div className="bg-dark-card rounded-2xl p-6 text-center mb-4">
+        <p className="text-gray-400 text-sm mb-1">Overall (shallowest groove)</p>
         <div className="flex items-end justify-center gap-1 mb-1">
-          <span className="text-7xl font-bold tabular-nums leading-none">{depth32nds}</span>
-          <span className="text-2xl text-gray-400 mb-2">/32″</span>
+          <span className="text-6xl font-bold tabular-nums leading-none">{depth32nds}</span>
+          <span className="text-xl text-gray-400 mb-1">/32″</span>
         </div>
-        <p className="text-gray-400 text-lg">{depthMm.toFixed(1)} mm</p>
+        <p className="text-gray-400">{depthMm.toFixed(1)} mm</p>
+        {grooves.length > 0 && (
+          <p className="text-xs text-gray-500 mt-2">{grooves.length} grooves measured</p>
+        )}
       </div>
 
       <Badge rating={rating} />
+
+      {grooves.length > 0 && (
+        <div className="bg-dark-card rounded-xl p-4 mt-4">
+          <p className="text-xs font-semibold text-gray-400 mb-3">Per-groove depth</p>
+          <div className="space-y-2">
+            {grooves.map(g => (
+              <div key={g.id} className="flex items-center justify-between text-sm py-1.5 border-b border-gray-800 last:border-0">
+                <span className="text-gray-300">
+                  #{g.id} · {g.positionLabel}
+                </span>
+                <span className={`font-semibold tabular-nums ${RATING_CLS[g.rating] ?? ''}`}>
+                  {g.depth32nds}/32″
+                  <span className="text-gray-500 font-normal ml-1.5 text-xs">
+                    ({g.depthMm} mm)
+                  </span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {result.source === 'chatgpt' && result.confidence != null && (
         <p className="text-xs text-gray-500 text-center mt-2">

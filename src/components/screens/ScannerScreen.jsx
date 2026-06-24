@@ -104,7 +104,7 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
           <p className="text-white/60 text-xs text-center">
             {isAnalyzing
               ? 'Sending photo for groove analysis…'
-              : 'Align tread in bracket, hold steady, tap Capture'}
+              : 'Grooves should run left-to-right in bracket. Tap Capture'}
           </p>
           {lastNotes && (
             <p className="text-white/40 text-[10px] text-center line-clamp-3">

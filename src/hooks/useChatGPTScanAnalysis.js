@@ -20,7 +20,7 @@ export default function useChatGPTScanAnalysis({
   const [scanResult, setScanResult] = useState(null);
   const [analysisError, setAnalysisError] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [lastNotes, setLastNotes] = useState('Align tread in the bracket, hold steady, then tap Capture.');
+  const [lastNotes, setLastNotes] = useState('Align tread in the bracket — grooves run left-to-right. Tap Capture.');
   const [attempt, setAttempt] = useState(0);
 
   const apiAttempts = useRef(0);
@@ -87,36 +87,30 @@ export default function useChatGPTScanAnalysis({
         return;
       }
 
-      let depth32nds = parsed.depth32nds;
-      let depthMm = parsed.depthMm;
-
-      if (depth32nds == null && depthMm != null) {
-        depth32nds = clamp32nds(Math.round(depthMm / MM_PER_32ND));
-      }
-
-      if (depth32nds == null || parsed.confidence < 0.6) {
+      if (parsed.grooves.length === 0 || parsed.confidence < 0.6) {
         if (apiAttempts.current < MAX_ATTEMPTS) {
           setProgress(0);
           setIsAnalyzing(false);
           setLastNotes(
-            parsed.confidence < 0.6
-              ? `Low confidence (${Math.round(parsed.confidence * 100)}%). Improve lighting and tap Capture again.`
-              : `No depth reading. Tap Capture to retry (${apiAttempts.current}/${MAX_ATTEMPTS}).`
+            parsed.grooves.length === 0
+              ? `No grooves detected. Center tread in bracket and tap Capture (${apiAttempts.current}/${MAX_ATTEMPTS}).`
+              : `Low confidence (${Math.round(parsed.confidence * 100)}%). Improve lighting and tap Capture again.`
           );
           return;
         }
-        setAnalysisError('Could not measure tread depth confidently. Try better lighting or a closer angle.');
+        setAnalysisError('Could not detect tread grooves. Try better lighting, closer angle, or clearer groove view.');
         setIsAnalyzing(false);
         return;
       }
 
-      depth32nds = clamp32nds(depth32nds);
-      depthMm = depthMm ?? parseFloat((depth32nds * MM_PER_32ND).toFixed(1));
+      const depth32nds = parsed.depth32nds;
+      const depthMm = parsed.depthMm ?? parseFloat((depth32nds * MM_PER_32ND).toFixed(1));
 
       setScanResult({
         depthMm,
         depth32nds,
         rating: getSafetyLevelFrom32nds(depth32nds),
+        grooves: parsed.grooves,
         source: 'chatgpt',
         confidence: parsed.confidence,
         notes: parsed.notes
