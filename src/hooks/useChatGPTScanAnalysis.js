@@ -10,7 +10,7 @@ import {
   isBlockedGuidance
 } from '../utils/parseChatGPTAnalysis.js';
 import { computeCV, estimateProgress } from '../utils/scanQuality.js';
-import { getSafetyLevel } from '../utils/depthToTread.js';
+import { formatDepthResult, clamp32nds, getSafetyLevelFrom32nds, MM_PER_32ND } from '../utils/depthToTread.js';
 
 const MIN_FRAMES = 30;
 const TARGET_CV = 0.15;
@@ -145,14 +145,22 @@ export default function useChatGPTScanAnalysis({
               return;
             }
 
-            const depth32nds = parsed.depth32nds != null
-              ? Math.max(1, Math.min(20, Math.round(parsed.depth32nds)))
-              : Math.max(1, Math.min(20, Math.round(medianDepth / 0.794)));
+            let depth32nds;
+            let depthMm;
+
+            if (parsed.depth32nds != null) {
+              depth32nds = clamp32nds(parsed.depth32nds);
+              depthMm = parseFloat((depth32nds * MM_PER_32ND).toFixed(1));
+            } else {
+              const formatted = formatDepthResult(medianDepth);
+              depth32nds = formatted.depth32nds;
+              depthMm = formatted.depthMm;
+            }
 
             setScanResult({
-              depthMm: parseFloat(medianDepth.toFixed(1)),
+              depthMm,
               depth32nds,
-              rating: getSafetyLevel(medianDepth),
+              rating: getSafetyLevelFrom32nds(depth32nds),
               source: 'chatgpt',
               confidence: parsed.confidence,
               notes: parsed.notes

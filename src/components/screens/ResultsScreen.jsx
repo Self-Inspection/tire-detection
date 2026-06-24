@@ -2,18 +2,17 @@ import Badge from '../ui/Badge.jsx';
 import Button from '../ui/Button.jsx';
 
 const RECOMMENDATIONS = {
-  good:   'Your tires are in excellent condition. Check again in 6 months.',
-  fair:   'Tread is adequate but monitor closely. Plan replacement within 6–12 months.',
-  poor:   'Tires are approaching the legal minimum. Replace soon — wet-weather grip is reduced.',
-  danger: 'REPLACE IMMEDIATELY. Below the legal minimum of 2 / 32″ (1.6 mm). Unsafe in rain.'
+  good:   'Your tires are in good condition (8/32″ or more). Check again in 6 months.',
+  fair:   'Tread is okay (4–7/32″) but monitor closely. Plan replacement within 6–12 months.',
+  poor:   'Tread is bad (3/32″). Replace soon — wet-weather grip is significantly reduced.',
+  danger: 'REPLACE IMMEDIATELY. At the legal minimum of 2/32″. Unsafe in rain.'
 };
 
 const REFERENCE = [
-  { label: 'New tire',           value: '10–11/32″',  cls: 'text-tire-good' },
-  { label: 'Good',               value: '≥ 6/32″',  cls: 'text-tire-good' },
-  { label: 'Fair',               value: '4–6/32″',    cls: 'text-tire-fair' },
-  { label: 'Replace soon',       value: '2–4/32″',    cls: 'text-tire-poor' },
-  { label: 'US legal minimum',   value: '2/32″ (1.6 mm)', cls: 'text-tire-danger' }
+  { label: 'Good',             value: '8–10/32″',  cls: 'text-tire-good' },
+  { label: 'Okay',             value: '4–7/32″',   cls: 'text-tire-fair' },
+  { label: 'Bad',              value: '3/32″',     cls: 'text-tire-poor' },
+  { label: 'Legal limit',      value: '2/32″',     cls: 'text-tire-danger' }
 ];
 
 export default function ResultsScreen({ result, onScanAgain, onDone }) {
@@ -31,7 +30,6 @@ export default function ResultsScreen({ result, onScanAgain, onDone }) {
     <div className="flex flex-col h-full safe-top safe-bottom px-6 py-6 overflow-y-auto">
       <h2 className="text-2xl font-bold mb-5">Scan Results</h2>
 
-      {/* Primary reading */}
       <div className="bg-dark-card rounded-2xl p-8 text-center mb-4">
         <p className="text-gray-400 text-sm mb-2">Tread Depth</p>
         <div className="flex items-end justify-center gap-1 mb-1">
@@ -53,9 +51,8 @@ export default function ResultsScreen({ result, onScanAgain, onDone }) {
         <p className="text-sm leading-relaxed">{RECOMMENDATIONS[rating]}</p>
       </div>
 
-      {/* Reference chart */}
       <div className="bg-dark-card rounded-xl p-4 mt-4">
-        <p className="text-xs font-semibold text-gray-400 mb-3">Reference</p>
+        <p className="text-xs font-semibold text-gray-400 mb-3">Tread depth chart</p>
         <div className="space-y-2">
           {REFERENCE.map(r => (
             <div key={r.label} className="flex justify-between text-xs">

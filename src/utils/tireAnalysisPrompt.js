@@ -45,11 +45,18 @@ Session gates (for ready_to_complete):
 - Grooves detected in most recent frames
 - No active too_far, too_close, or move_slower
 
-Safety rating thresholds (mm):
-- >= 4.76: good
-- >= 3.18: fair
-- >= 1.59: poor
-- < 1.59: danger
+Tread depth scale (32nds of an inch) — ONLY use values 2 through 10:
+- 10/32", 9/32", 8/32" = GOOD (new/well-maintained tire)
+- 7/32", 6/32", 5/32", 4/32" = OKAY (adequate, monitor wear)
+- 3/32" = BAD (replace soon)
+- 2/32" = LEGAL LIMIT (minimum, unsafe — replace immediately)
+- NEVER return values above 10/32 or below 2/32
+
+Safety rating from depth_32nds:
+- good: 8–10/32
+- fair: 4–7/32
+- poor: 3/32
+- danger: 2/32
 
 Return ONLY valid JSON with this shape:
 {
@@ -83,7 +90,8 @@ Return ONLY valid JSON with this shape:
 
 Rules:
 - Never set accept_frame_for_accumulation=true unless grooves are clearly visible.
-- depth_mm and depth_32nds may be null until ready_to_complete is true.
+- depth_32nds MUST be an integer from 2 to 10 only. Never return 20/32 or other invalid values.
+- depth_mm = depth_32nds × 0.794 (approx)
 - Be conservative; prefer tilt_phone over false acceptance.
 - confidence is 0.0 to 1.0.`;
 }

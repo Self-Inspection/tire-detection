@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { computeGrooveDepth, computeFallbackGrooveDepth, getSafetyLevel } from '../utils/depthToTread.js';
+import { computeGrooveDepth, computeFallbackGrooveDepth, formatDepthResult } from '../utils/depthToTread.js';
 import { computeMotionMagnitude } from '../utils/opticalFlow.js';
 import { computeHistogram, findBimodalPeaks, computeCV } from '../utils/scanQuality.js';
 
@@ -199,11 +199,11 @@ export default function useScanAnalysis({
       if (!stableStart.current) stableStart.current = performance.now();
       else if (performance.now() - stableStart.current >= STABLE_MS) {
         const medianDepth = medianOf(depthBuf.current.slice(-20));
-        const depth32nds  = Math.max(1, Math.min(20, Math.round(medianDepth / 0.794)));
+        const { depthMm, depth32nds, rating } = formatDepthResult(medianDepth);
         setScanResult({
-          depthMm:    parseFloat(medianDepth.toFixed(1)),
+          depthMm,
           depth32nds,
-          rating:     getSafetyLevel(medianDepth)
+          rating
         });
         setProgress(1);
         setIsComplete(true);

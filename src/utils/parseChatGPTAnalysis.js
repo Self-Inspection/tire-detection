@@ -1,4 +1,4 @@
-import { getSafetyLevel } from './depthToTread.js';
+import { getSafetyLevelFrom32nds, clamp32nds } from './depthToTread.js';
 import { GUIDANCE_VALUES } from './tireAnalysisPrompt.js';
 
 const BLOCKED_GUIDANCE = new Set(['move_slower', 'too_far', 'too_close']);
@@ -31,12 +31,12 @@ export function parseChatGPTAnalysis(raw) {
     : null;
 
   const depth32nds = typeof raw.measurement?.depth_32nds === 'number'
-    ? raw.measurement.depth_32nds
+    ? clamp32nds(raw.measurement.depth_32nds)
     : null;
 
   const rating = raw.measurement?.rating && raw.measurement.rating !== 'null'
     ? raw.measurement.rating
-    : (depthMm != null ? getSafetyLevel(depthMm) : null);
+    : (depth32nds != null ? getSafetyLevelFrom32nds(depth32nds) : null);
 
   return {
     guidance,

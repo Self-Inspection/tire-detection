@@ -1,20 +1,57 @@
 import { computeHistogram, findBimodalPeaks } from './scanQuality.js';
 
+// 1/32 inch in mm
+export const MM_PER_32ND = 0.794;
+// Industry tread depth chart range: 2/32" (legal limit) to 10/32" (new/good)
+export const MIN_TREAD_32NDS = 2;
+export const MAX_TREAD_32NDS = 10;
+
 export const TIRE_TYPES = [
   { id: 'car',        label: 'Car',          icon: '🚗', treadWidthMm: 190 },
   { id: 'truck',      label: 'Truck / SUV',  icon: '🚙', treadWidthMm: 230 },
   { id: 'motorcycle', label: 'Motorcycle',   icon: '🏍️', treadWidthMm: 130 }
 ];
 
-// Safety thresholds in mm (converted from 32nds: 6/32=4.76, 4/32=3.18, 2/32=1.59)
-export const SAFETY_THRESHOLDS = { good: 4.76, fair: 3.18, poor: 1.59 };
+// Rating bands match standard tread depth chart (32nds):
+// 8–10/32" = GOOD, 4–7/32" = OKAY, 3/32" = BAD, 2/32" = legal limit
+export function clamp32nds(value) {
+  return Math.max(MIN_TREAD_32NDS, Math.min(MAX_TREAD_32NDS, Math.round(value)));
+}
 
-export function getSafetyLevel(depthMm) {
-  if (depthMm >= SAFETY_THRESHOLDS.good) return 'good';
-  if (depthMm >= SAFETY_THRESHOLDS.fair) return 'fair';
-  if (depthMm >= SAFETY_THRESHOLDS.poor) return 'poor';
+export function mmTo32nds(depthMm) {
+  const raw = Math.round(depthMm / MM_PER_32ND);
+  return Math.max(MIN_TREAD_32NDS, Math.min(MAX_TREAD_32NDS, raw));
+}
+
+export function getSafetyLevelFrom32nds(depth32nds) {
+  if (depth32nds >= 8) return 'good';
+  if (depth32nds >= 4) return 'fair';
+  if (depth32nds >= 3) return 'poor';
   return 'danger';
 }
+
+export function getSafetyLevel(depthMm) {
+  return getSafetyLevelFrom32nds(mmTo32nds(depthMm));
+}
+
+export function clampDepthMm(depthMm) {
+  const minMm = MIN_TREAD_32NDS * MM_PER_32ND;
+  const maxMm = MAX_TREAD_32NDS * MM_PER_32ND;
+  return Math.max(minMm, Math.min(maxMm, depthMm));
+}
+
+export function formatDepthResult(depthMm) {
+  const clampedMm = clampDepthMm(depthMm);
+  const depth32nds = mmTo32nds(clampedMm);
+  return {
+    depthMm: parseFloat(clampedMm.toFixed(1)),
+    depth32nds,
+    rating: getSafetyLevelFrom32nds(depth32nds)
+  };
+}
+
+// Legacy mm thresholds (kept for reference)
+export const SAFETY_THRESHOLDS = { good: 6.35, fair: 3.18, poor: 2.38 };
 
 // Estimated focal length for a typical phone rear camera (~4mm lens, ~6mm sensor, 1280px wide).
 // Used only as a fallback — WebXR supplies the device's true focal length when available.
@@ -86,12 +123,9 @@ export function computeGrooveDepth(depthRoi, { treadWidthMm, metricsScaleFactor,
     depthMm = depthDelta * focalScaleMmPerUnit(treadWidthMm, focalLengthPx);
   }
 
-  depthMm = Math.max(0.5, Math.min(20, depthMm));
+  depthMm = clampDepthMm(depthMm);
 
-  return {
-    depthMm,
-    depth32nds: Math.max(1, Math.round(depthMm / 0.794)) // 1/32" = 0.794mm
-  };
+  return formatDepthResult(depthMm);
 }
 
 /**
@@ -115,6 +149,6 @@ export function computeFallbackGrooveDepth(depthRoi, { treadWidthMm, metricsScal
     depthMm = depthDelta * focalScaleMmPerUnit(treadWidthMm, focalLengthPx);
   }
 
-  depthMm = Math.max(0.5, Math.min(20, depthMm));
-  return { depthMm, depth32nds: Math.max(1, Math.round(depthMm / 0.794)) };
+  depthMm = clampDepthMm(depthMm);
+  return formatDepthResult(depthMm);
 }
