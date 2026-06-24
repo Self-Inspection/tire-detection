@@ -43,6 +43,12 @@ export default function ResultsScreen({ result, onScanAgain, onDone }) {
 
       <Badge rating={rating} />
 
+      {result.source === 'chatgpt' && result.confidence != null && (
+        <p className="text-xs text-gray-500 text-center mt-2">
+          AI confidence: {Math.round(result.confidence * 100)}%
+        </p>
+      )}
+
       <div className={`rounded-xl p-4 border mt-4 ${alertBorder}`}>
         <p className="text-sm leading-relaxed">{RECOMMENDATIONS[rating]}</p>
       </div>

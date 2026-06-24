@@ -1,35 +1,31 @@
 import { useRef, useEffect, useState } from 'react';
 import useCamera from '../../hooks/useCamera.js';
-import useDepthModel from '../../hooks/useDepthModel.js';
-import useWebXR from '../../hooks/useWebXR.js';
-import useScanAnalysis from '../../hooks/useScanAnalysis.js';
+import useChatGPTScanAnalysis from '../../hooks/useChatGPTScanAnalysis.js';
 import GuidanceOverlay from '../ui/GuidanceOverlay.jsx';
 import ProgressRing from '../ui/ProgressRing.jsx';
-import DepthHeatmap from '../ui/DepthHeatmap.jsx';
 
-export default function ScannerScreen({ tireType, xrSession, onComplete, onCancel }) {
+export default function ScannerScreen({ tireType, scanConfig, onComplete, onCancel }) {
   const videoRef = useRef(null);
   const [showConfirm, setShowConfirm] = useState(false);
 
-  // In LiDAR mode the XR session provides the camera feed, so getUserMedia is
-  // skipped — but we still call useCamera to handle the non-LiDAR fallback path.
-  const { error: cameraError, isReady }               = useCamera(xrSession ? null : videoRef);
-  const { estimateDepth, isModelLoaded, modelError }  = useDepthModel();
-  const { metricsScaleFactor, focalLengthPx, lidarFrameRef } = useWebXR({ existingSession: xrSession });
+  const { error: cameraError, isReady } = useCamera(videoRef);
 
-  const isLidar    = !!xrSession;
-  const modelReady = isLidar ? true : isModelLoaded;
-  const camReady   = isLidar ? true : isReady;
-
-  const { guidance, progress, isComplete, scanResult, depthMap } = useScanAnalysis({
+  const {
+    guidance,
+    progress,
+    isComplete,
+    scanResult,
+    analysisError,
+    isAnalyzing,
+    lastNotes
+  } = useChatGPTScanAnalysis({
     videoRef,
-    estimateDepth,
-    isModelLoaded: modelReady,
+    isReady,
     tireType,
-    metricsScaleFactor,
-    focalLengthPx,
-    lidarFrameRef: isLidar ? lidarFrameRef : null
+    scanConfig
   });
+
+  const activeError = cameraError || analysisError;
 
   useEffect(() => {
     if (isComplete && scanResult) onComplete(scanResult);
@@ -37,7 +33,9 @@ export default function ScannerScreen({ tireType, xrSession, onComplete, onCance
 
   useEffect(() => {
     let lock = null;
-    navigator.wakeLock?.request('screen').then(l => { lock = l; }).catch(() => {});
+    navigator.wakeLock?.request('screen')
+      .then(l => { lock = l; })
+      .catch(() => {});
     return () => { lock?.release(); };
   }, []);
 
@@ -51,22 +49,17 @@ export default function ScannerScreen({ tireType, xrSession, onComplete, onCance
     return () => window.removeEventListener('popstate', onPop);
   }, []);
 
-  const loading = !camReady ? 'Accessing camera…'
-    : (!isLidar && !isModelLoaded) ? 'Loading depth model…'
-    : null;
+  const loading = !isReady ? 'Accessing camera…' : null;
 
   return (
     <div className="relative w-full h-full bg-black">
-      {/* Live camera feed — hidden in LiDAR mode (XR session shows the pass-through) */}
-      {!isLidar && (
-        <video
-          ref={videoRef}
-          autoPlay muted playsInline
-          className="absolute inset-0 w-full h-full object-cover"
-        />
-      )}
-
-      {depthMap && <DepthHeatmap depthMap={depthMap} />}
+      <video
+        ref={videoRef}
+        autoPlay
+        muted
+        playsInline
+        className="absolute inset-0 w-full h-full object-cover"
+      />
 
       {loading && (
         <div className="absolute inset-0 bg-black/75 flex flex-col items-center justify-center gap-4 z-20">
@@ -75,10 +68,10 @@ export default function ScannerScreen({ tireType, xrSession, onComplete, onCance
         </div>
       )}
 
-      {(cameraError || modelError) && (
+      {activeError && (
         <div className="absolute inset-0 bg-black/80 flex items-center justify-center p-6 z-20">
           <div className="bg-dark-card rounded-xl p-6 text-center max-w-xs">
-            <p className="text-red-400 mb-4 text-sm">{cameraError || modelError}</p>
+            <p className="text-red-400 mb-4 text-sm">{activeError}</p>
             <button onClick={onCancel} className="text-blue-400 text-sm underline">Go Back</button>
           </div>
         </div>
@@ -86,12 +79,11 @@ export default function ScannerScreen({ tireType, xrSession, onComplete, onCance
 
       <GuidanceOverlay guidance={guidance} />
 
-      {/* LiDAR badge */}
-      {isLidar && !loading && (
-        <div className="absolute top-0 left-0 safe-top p-4 z-10">
-          <span className="bg-purple-600/80 backdrop-blur text-white text-xs px-3 py-1 rounded-full">
-            📡 LiDAR
-          </span>
+      {isAnalyzing && !loading && (
+        <div className="absolute top-16 left-0 right-0 flex justify-center z-10 pointer-events-none">
+          <div className="bg-purple-700/90 rounded-full px-4 py-1.5 text-xs text-white">
+            Analyzing…
+          </div>
         </div>
       )}
 
@@ -106,6 +98,9 @@ export default function ScannerScreen({ tireType, xrSession, onComplete, onCance
         <div className="absolute bottom-0 left-0 right-0 safe-bottom flex flex-col items-center pb-8 gap-2 z-10">
           <ProgressRing progress={progress} />
           <p className="text-white/60 text-xs">Scanning tread…</p>
+          {lastNotes && (
+            <p className="text-white/40 text-[10px] px-6 text-center line-clamp-2">{lastNotes}</p>
+          )}
         </div>
       )}
 

@@ -7,8 +7,8 @@ import ResultsScreen from './components/screens/ResultsScreen.jsx';
 const initialState = {
   screen: 'home',
   tireType: null,
-  scanResult: null,
-  xrSession: null
+  scanConfig: null,
+  scanResult: null
 };
 
 function reducer(state, action) {
@@ -16,11 +16,11 @@ function reducer(state, action) {
     case 'CAMERA_GRANTED':
       return { ...state, screen: 'setup' };
     case 'BEGIN_SCAN':
-      return { ...state, screen: 'scanning', tireType: action.tireType, xrSession: action.xrSession ?? null };
+      return { ...state, screen: 'scanning', tireType: action.tireType, scanConfig: action.scanConfig };
     case 'SCAN_COMPLETE':
-      return { ...state, screen: 'results', scanResult: action.result, xrSession: null };
+      return { ...state, screen: 'results', scanResult: action.result };
     case 'SCAN_AGAIN':
-      return { ...state, screen: 'setup', scanResult: null, xrSession: null };
+      return { ...state, screen: 'setup', scanResult: null };
     case 'DONE':
       return { ...initialState };
     default:
@@ -37,14 +37,12 @@ export default function App() {
         <HomeScreen onCameraGranted={() => dispatch({ type: 'CAMERA_GRANTED' })} />
       )}
       {state.screen === 'setup' && (
-        <SetupScreen
-          onBeginScan={(tireType, xrSession) => dispatch({ type: 'BEGIN_SCAN', tireType, xrSession })}
-        />
+        <SetupScreen onBeginScan={(tireType, scanConfig) => dispatch({ type: 'BEGIN_SCAN', tireType, scanConfig })} />
       )}
       {state.screen === 'scanning' && (
         <ScannerScreen
           tireType={state.tireType}
-          xrSession={state.xrSession}
+          scanConfig={state.scanConfig}
           onComplete={(result) => dispatch({ type: 'SCAN_COMPLETE', result })}
           onCancel={() => dispatch({ type: 'SCAN_AGAIN' })}
         />
