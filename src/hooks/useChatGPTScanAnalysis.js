@@ -1,12 +1,25 @@
 import { useState, useRef, useCallback } from 'react';
-import { captureVideoFrame } from '../utils/captureFrame.js';
+import {
+  captureVideoFrame,
+  BURST_COUNT,
+  BURST_INTERVAL_MS
+} from '../utils/captureFrame.js';
 import { analyzeTireFrame } from '../utils/analyzeFrame.js';
 import { buildUserPrompt, getTargetDistanceCm } from '../utils/tireAnalysisPrompt.js';
 import { parseChatGPTAnalysis, isBlockedGuidance } from '../utils/parseChatGPTAnalysis.js';
-import { clamp32nds, getSafetyLevelFrom32nds, MM_PER_32ND } from '../utils/depthToTread.js';
-import { isSharpEnough, measureBlurScore, MIN_BLUR_SCORE } from '../utils/imageQuality.js';
+import { getSafetyLevelFrom32nds, MM_PER_32ND } from '../utils/depthToTread.js';
+import {
+  measureBlurScore,
+  MIN_BLUR_SCORE,
+  selectSharpBurstFrames,
+  bestBurstScore
+} from '../utils/imageQuality.js';
 
 const MAX_ATTEMPTS = 3;
+
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 export default function useChatGPTScanAnalysis({
   videoRef,
@@ -20,6 +33,7 @@ export default function useChatGPTScanAnalysis({
   const [scanResult, setScanResult] = useState(null);
   const [analysisError, setAnalysisError] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isCapturing, setIsCapturing] = useState(false);
   const [lastNotes, setLastNotes] = useState('Align tread in the blue box, then tap Capture.');
   const [attempt, setAttempt] = useState(0);
 
@@ -31,39 +45,51 @@ export default function useChatGPTScanAnalysis({
   scanConfigRef.current = scanConfig;
 
   const triggerCapture = useCallback(async () => {
-    if (!isReady || isAnalyzing || isComplete) return;
+    if (!isReady || isAnalyzing || isCapturing || isComplete) return;
 
     const video = videoRef.current;
     const config = scanConfigRef.current;
     if (!video || !config?.systemPrompt) return;
 
-    const blurScore = measureBlurScore(video);
-    if (!isSharpEnough(video)) {
+    setIsCapturing(true);
+    setAnalysisError(null);
+    setLastNotes('Hold steady — capturing photos…');
+
+    const scoredFrames = [];
+    for (let i = 0; i < BURST_COUNT; i++) {
+      scoredFrames.push({
+        frame: captureVideoFrame(video),
+        score: measureBlurScore(video)
+      });
+      if (i < BURST_COUNT - 1) await delay(BURST_INTERVAL_MS);
+    }
+
+    const sharpFrames = selectSharpBurstFrames(scoredFrames);
+    setIsCapturing(false);
+
+    if (sharpFrames.length === 0) {
       setGuidance('move_slower');
-      setLastNotes(`Photo too blurry (score ${Math.round(blurScore)}/${MIN_BLUR_SCORE}). Hold steadier and tap Capture again.`);
+      const best = Math.round(bestBurstScore(scoredFrames));
+      setLastNotes(`Photos too blurry (best ${best}/${MIN_BLUR_SCORE}). Hold steadier and tap Capture again.`);
       return;
     }
 
-    const imageBase64 = captureVideoFrame(video);
-    if (!imageBase64) {
-      setLastNotes('Camera not ready — wait a moment and try again.');
-      return;
-    }
+    const imagesBase64 = sharpFrames.map(f => f.frame);
 
     apiAttempts.current += 1;
     setAttempt(apiAttempts.current);
     setIsAnalyzing(true);
-    setAnalysisError(null);
     setProgress(0.4);
-    setLastNotes('Analyzing tread grooves…');
+    setLastNotes(`Analyzing ${imagesBase64.length} photo${imagesBase64.length > 1 ? 's' : ''}…`);
 
     try {
       const analysis = await analyzeTireFrame({
-        imageBase64,
+        imagesBase64,
         systemPrompt: config.systemPrompt,
         userPrompt: buildUserPrompt({
           tireType: tireTypeRef.current,
-          targetDistanceCm: getTargetDistanceCm()
+          targetDistanceCm: getTargetDistanceCm(),
+          imageCount: imagesBase64.length
         })
       });
 
@@ -113,7 +139,8 @@ export default function useChatGPTScanAnalysis({
         grooves: parsed.grooves,
         source: 'chatgpt',
         confidence: parsed.confidence,
-        notes: parsed.notes
+        notes: parsed.notes,
+        photoCount: imagesBase64.length
       });
       setProgress(1);
       setIsComplete(true);
@@ -127,9 +154,9 @@ export default function useChatGPTScanAnalysis({
     } finally {
       setIsAnalyzing(false);
     }
-  }, [isReady, isAnalyzing, isComplete, videoRef]);
+  }, [isReady, isAnalyzing, isCapturing, isComplete, videoRef]);
 
-  const canCapture = isReady && !isAnalyzing && !isComplete && attempt < MAX_ATTEMPTS;
+  const canCapture = isReady && !isAnalyzing && !isCapturing && !isComplete && attempt < MAX_ATTEMPTS;
 
   return {
     guidance,
@@ -138,6 +165,7 @@ export default function useChatGPTScanAnalysis({
     scanResult,
     analysisError,
     isAnalyzing,
+    isCapturing,
     lastNotes,
     attempt,
     maxAttempts: MAX_ATTEMPTS,

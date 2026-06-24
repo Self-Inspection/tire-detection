@@ -3,7 +3,7 @@ import Button from '../ui/Button.jsx';
 
 const STEPS = [
   { icon: '🔍', text: 'Point rear camera at tire tread' },
-  { icon: '📸', text: 'Fill the blue box and tap Capture' },
+  { icon: '📸', text: 'Tap Capture — we take 3 quick photos for accuracy' },
   { icon: '📊', text: 'Get instant tread depth & safety rating' }
 ];
 

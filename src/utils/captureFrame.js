@@ -30,3 +30,27 @@ export function captureVideoFrame(videoElement, {
 
   return canvas.toDataURL('image/jpeg', quality);
 }
+
+export const BURST_COUNT = 3;
+export const BURST_INTERVAL_MS = 200;
+
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Grab several frames in quick succession. Caller scores sharpness per frame.
+ */
+export async function captureBurstFrames(videoElement, {
+  count = BURST_COUNT,
+  intervalMs = BURST_INTERVAL_MS,
+  ...captureOpts
+} = {}) {
+  const frames = [];
+  for (let i = 0; i < count; i++) {
+    const frame = captureVideoFrame(videoElement, captureOpts);
+    if (frame) frames.push(frame);
+    if (i < count - 1) await delay(intervalMs);
+  }
+  return frames;
+}

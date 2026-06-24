@@ -44,6 +44,7 @@ app.get('/api/health', (_req, res) => {
 app.post('/api/analyze-frame', async (req, res) => {
   const {
     imageBase64,
+    imagesBase64,
     systemPrompt,
     userPrompt
   } = req.body ?? {};
@@ -56,13 +57,20 @@ app.post('/api/analyze-frame', async (req, res) => {
     });
   }
 
-  if (!imageBase64 || !systemPrompt) {
-    return res.status(400).json({ error: 'imageBase64 and systemPrompt are required.' });
+  const images = Array.isArray(imagesBase64) && imagesBase64.length
+    ? imagesBase64
+    : (imageBase64 ? [imageBase64] : []);
+
+  if (images.length === 0 || !systemPrompt) {
+    return res.status(400).json({ error: 'imagesBase64 (or imageBase64) and systemPrompt are required.' });
   }
 
-  const imageUrl = imageBase64.startsWith('data:')
-    ? imageBase64
-    : `data:image/jpeg;base64,${imageBase64}`;
+  const imageParts = images.map(img => {
+    const imageUrl = img.startsWith('data:')
+      ? img
+      : `data:image/jpeg;base64,${img}`;
+    return { type: 'image_url', image_url: { url: imageUrl, detail: 'high' } };
+  });
 
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -80,8 +88,8 @@ app.post('/api/analyze-frame', async (req, res) => {
           {
             role: 'user',
             content: [
-              { type: 'text', text: userPrompt || 'Analyze this tire scan frame and return strict JSON.' },
-              { type: 'image_url', image_url: { url: imageUrl, detail: 'high' } }
+              { type: 'text', text: userPrompt || 'Analyze these tire tread photos and return strict JSON.' },
+              ...imageParts
             ]
           }
         ]

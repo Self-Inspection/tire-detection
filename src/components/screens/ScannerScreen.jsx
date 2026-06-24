@@ -18,6 +18,7 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
     scanResult,
     analysisError,
     isAnalyzing,
+    isCapturing,
     lastNotes,
     attempt,
     maxAttempts,
@@ -87,7 +88,15 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
       {isAnalyzing && !loading && (
         <div className="absolute top-16 left-0 right-0 flex justify-center z-20 pointer-events-none">
           <div className="bg-purple-700/90 rounded-full px-4 py-1.5 text-xs text-white">
-            Analyzing photo…
+            Analyzing photos…
+          </div>
+        </div>
+      )}
+
+      {isCapturing && !loading && (
+        <div className="absolute top-16 left-0 right-0 flex justify-center z-20 pointer-events-none">
+          <div className="bg-blue-700/90 rounded-full px-4 py-1.5 text-xs text-white">
+            Hold steady…
           </div>
         </div>
       )}
@@ -135,7 +144,7 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
                 {lastNotes}{attempt > 0 && !isAnalyzing ? ` (${attempt}/${maxAttempts})` : ''}
               </p>
             )}
-            {!isAnalyzing && (
+            {!isAnalyzing && !isCapturing && (
               <button
                 type="button"
                 onClick={triggerCapture}

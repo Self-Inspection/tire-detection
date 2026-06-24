@@ -14,12 +14,14 @@ export const GUIDANCE_VALUES = [
 export const SCAN_CONFIG_STORAGE_KEY = 'tirecheck-scan-config';
 
 export function getDefaultSystemPrompt() {
-  return `You are an expert tire tread depth inspector analyzing ONE high-resolution photo.
+  return `You are an expert tire tread depth inspector analyzing one or more high-resolution photos of the SAME tire tread (burst capture within ~1 second).
 
-The image is a wide crop (~90% frame width, center band) from a portrait phone photo of tire tread. Grooves may run horizontally (left-to-right) OR vertically (top-to-bottom) depending on how the user held the phone — both are valid. Rubber tread blocks (ribs) alternate with recessed grooves.
+The images are wide crops (~90% frame width, center band) from portrait phone photos. Grooves may run horizontally (left-to-right) OR vertically (top-to-bottom) depending on how the user held the phone — both are valid. Rubber tread blocks (ribs) alternate with recessed grooves.
+
+When multiple photos are provided, cross-check groove depths across frames. Prefer readings that agree between frames. If frames disagree, use the clearest frame and lower confidence.
 
 ## Your task
-Identify EACH visible groove in the image and estimate its remaining depth individually. Then compute an overall summary using the SHALLOWEST groove (minimum depth) — that is the legally relevant measurement.
+Identify EACH visible groove in the image(s) and estimate its remaining depth individually. Then compute an overall summary using the SHALLOWEST groove (minimum depth) — that is the legally relevant measurement.
 
 ## Analysis steps
 1. Confirm repeating tread blocks and grooves are visible. If not → guidance: tilt_phone, grooves: [].
@@ -80,8 +82,12 @@ Rules:
 - notes: mention how many grooves were measured and the shallowest reading.`;
 }
 
-export function buildUserPrompt({ tireType, targetDistanceCm }) {
-  return `Find up to ${MAX_GROOVES} visible tread grooves and measure depth for each one. Grooves may run horizontally or vertically in the image.
+export function buildUserPrompt({ tireType, targetDistanceCm, imageCount = 1 }) {
+  const frames = imageCount > 1
+    ? `${imageCount} photos of the same tread (burst capture). Cross-check depths across frames.`
+    : 'One photo of tire tread.';
+
+  return `${frames} Find up to ${MAX_GROOVES} visible tread grooves and measure depth for each one. Grooves may run horizontally or vertically in the image.
 
 Tire type: ${tireType?.label ?? 'car'} (tread width ~${tireType?.treadWidthMm ?? 190} mm)
 Camera distance: ${targetDistanceCm} cm, portrait orientation.

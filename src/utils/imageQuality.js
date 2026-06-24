@@ -59,3 +59,19 @@ export function measureBlurScore(videoElement, {
 export function isSharpEnough(videoElement, minScore = MIN_BLUR_SCORE) {
   return measureBlurScore(videoElement) >= minScore;
 }
+
+/** Score + frame pairs from a burst; returns sharpest frames up to maxCount. */
+export function selectSharpBurstFrames(scoredFrames, {
+  minScore = MIN_BLUR_SCORE,
+  maxCount = 3
+} = {}) {
+  return scoredFrames
+    .filter(f => f.frame && f.score >= minScore)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, maxCount);
+}
+
+export function bestBurstScore(scoredFrames) {
+  if (scoredFrames.length === 0) return 0;
+  return Math.max(...scoredFrames.map(f => f.score));
+}
