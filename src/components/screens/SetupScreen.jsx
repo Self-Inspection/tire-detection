@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { TIRE_TYPES } from '../../utils/depthToTread.js';
 import {
   getDefaultSystemPrompt,
@@ -10,31 +10,19 @@ import Button from '../ui/Button.jsx';
 export default function SetupScreen({ onBeginScan }) {
   const saved = loadScanConfig();
   const [selectedId, setSelectedId] = useState('car');
-  const [apiKey, setApiKey] = useState(saved?.apiKey ?? '');
   const [systemPrompt, setSystemPrompt] = useState(saved?.systemPrompt ?? getDefaultSystemPrompt());
   const [showPrompt, setShowPrompt] = useState(false);
-  const [serverHasKey, setServerHasKey] = useState(null);
 
   const selected = TIRE_TYPES.find(t => t.id === selectedId);
-
-  useEffect(() => {
-    fetch('/api/health')
-      .then(r => r.ok ? r.json() : null)
-      .then(data => setServerHasKey(Boolean(data?.hasServerKey)))
-      .catch(() => setServerHasKey(false));
-  }, []);
 
   function handleBeginScan() {
     const config = {
       scanMode: 'chatgpt',
-      apiKey: apiKey.trim(),
       systemPrompt: systemPrompt.trim() || getDefaultSystemPrompt()
     };
     saveScanConfig(config);
     onBeginScan(selected, config);
   }
-
-  const needsApiKey = serverHasKey === false && !apiKey.trim();
 
   return (
     <div className="flex flex-col h-full safe-top safe-bottom px-6 py-6 overflow-y-auto">
@@ -62,41 +50,22 @@ export default function SetupScreen({ onBeginScan }) {
         ))}
       </div>
 
-      <div className="mt-4 bg-dark-card rounded-xl p-4 space-y-3">
-        <div>
-          <p className="text-sm font-semibold mb-1">OpenAI API key</p>
-          <p className="text-xs text-gray-400 mb-2">
-            {serverHasKey
-              ? 'Server key detected — optional override below.'
-              : 'Required unless OPENAI_API_KEY is set on the server (Railway).'}
-          </p>
-          <input
-            type="password"
-            value={apiKey}
-            onChange={e => setApiKey(e.target.value)}
-            placeholder="sk-..."
-            autoComplete="off"
-            className="w-full bg-dark-surface border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder:text-gray-500"
+      <div className="mt-4 bg-dark-card rounded-xl p-4">
+        <button
+          type="button"
+          onClick={() => setShowPrompt(v => !v)}
+          className="text-sm text-blue-400 underline"
+        >
+          {showPrompt ? 'Hide custom prompt' : 'Edit system prompt'}
+        </button>
+        {showPrompt && (
+          <textarea
+            value={systemPrompt}
+            onChange={e => setSystemPrompt(e.target.value)}
+            rows={10}
+            className="mt-2 w-full bg-dark-surface border border-gray-700 rounded-lg px-3 py-2 text-xs text-white font-mono"
           />
-        </div>
-
-        <div>
-          <button
-            type="button"
-            onClick={() => setShowPrompt(v => !v)}
-            className="text-sm text-blue-400 underline"
-          >
-            {showPrompt ? 'Hide custom prompt' : 'Edit system prompt'}
-          </button>
-          {showPrompt && (
-            <textarea
-              value={systemPrompt}
-              onChange={e => setSystemPrompt(e.target.value)}
-              rows={10}
-              className="mt-2 w-full bg-dark-surface border border-gray-700 rounded-lg px-3 py-2 text-xs text-white font-mono"
-            />
-          )}
-        </div>
+        )}
       </div>
 
       <div className="mt-5 bg-dark-card rounded-xl p-4">
@@ -121,17 +90,9 @@ export default function SetupScreen({ onBeginScan }) {
 
       <div className="flex-1 min-h-4" />
 
-      <Button
-        variant="primary"
-        onClick={handleBeginScan}
-        fullWidth
-        disabled={needsApiKey}
-      >
+      <Button variant="primary" onClick={handleBeginScan} fullWidth>
         Begin Scan
       </Button>
-      {needsApiKey && (
-        <p className="text-xs text-red-400 text-center mt-2">Enter an OpenAI API key to start scanning.</p>
-      )}
     </div>
   );
 }

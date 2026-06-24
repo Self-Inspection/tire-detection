@@ -11,8 +11,8 @@ app.use(express.json({ limit: '12mb' }));
 
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
 
-function resolveApiKey(bodyKey, headerKey) {
-  return process.env.OPENAI_API_KEY || bodyKey || headerKey || null;
+function resolveApiKey() {
+  return process.env.OPENAI_API_KEY || null;
 }
 
 function extractJson(text) {
@@ -45,15 +45,14 @@ app.post('/api/analyze-frame', async (req, res) => {
   const {
     imageBase64,
     systemPrompt,
-    userPrompt,
-    apiKey: bodyApiKey
+    userPrompt
   } = req.body ?? {};
 
-  const apiKey = resolveApiKey(bodyApiKey, req.headers['x-openai-key']);
+  const apiKey = resolveApiKey();
 
   if (!apiKey) {
     return res.status(401).json({
-      error: 'Missing OpenAI API key. Set OPENAI_API_KEY on the server or enter a key in the app.'
+      error: 'OpenAI API key is not configured on the server.'
     });
   }
 

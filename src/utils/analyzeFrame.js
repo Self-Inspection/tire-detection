@@ -1,21 +1,12 @@
 export async function analyzeTireFrame({
   imageBase64,
   systemPrompt,
-  userPrompt,
-  apiKey
+  userPrompt
 }) {
-  const headers = { 'Content-Type': 'application/json' };
-  if (apiKey) headers['X-OpenAI-Key'] = apiKey;
-
   const response = await fetch('/api/analyze-frame', {
     method: 'POST',
-    headers,
-    body: JSON.stringify({
-      imageBase64,
-      systemPrompt,
-      userPrompt,
-      apiKey: apiKey || undefined
-    })
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ imageBase64, systemPrompt, userPrompt })
   });
 
   const payload = await response.json();

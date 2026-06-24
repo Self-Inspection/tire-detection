@@ -65,8 +65,7 @@ export default function useChatGPTScanAnalysis({
           userPrompt: buildUserPrompt({
             tireType: tireTypeRef.current,
             targetDistanceCm: getTargetDistanceCm(tireTypeRef.current)
-          }),
-          apiKey: config.apiKey || undefined
+          })
         });
 
         if (!running.current) return;
@@ -146,7 +145,7 @@ export default function useChatGPTScanAnalysis({
       running.current = false;
       if (timerId) clearTimeout(timerId);
     };
-  }, [isReady, scanConfig?.systemPrompt, scanConfig?.apiKey, videoRef]);
+  }, [isReady, scanConfig?.systemPrompt, videoRef]);
 
   return {
     guidance,
