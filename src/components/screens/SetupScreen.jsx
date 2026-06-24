@@ -78,7 +78,7 @@ export default function SetupScreen({ onBeginScan }) {
             {/* Camera notch hint */}
             <circle cx="60" cy="16" r="3" fill="#333" />
 
-            {/* Tread: grooves run left-to-right (horizontal lines) */}
+            {/* Tread: repeating blocks and grooves */}
             <rect x="34" y="22" width="52" height="140" fill="#2a2a2a" />
             {[0, 1, 2, 3, 4, 5, 6].map(i => (
               <g key={i}>
@@ -87,8 +87,8 @@ export default function SetupScreen({ onBeginScan }) {
               </g>
             ))}
 
-            {/* Scan bracket — tall center crop (portrait) */}
-            <rect x="44" y="40" width="32" height="100" rx="3" fill="none" stroke="#3b82f6"
+            {/* Scan bracket — wide band (matches live scanner) */}
+            <rect x="37" y="52" width="46" height="78" rx="3" fill="none" stroke="#3b82f6"
                   strokeWidth="2" strokeDasharray="6,3" />
 
             {/* Portrait label */}
@@ -99,7 +99,7 @@ export default function SetupScreen({ onBeginScan }) {
         </div>
         <p className="text-xs text-gray-400 mt-2">
           Hold phone <span className="text-white">upright in portrait</span> — do not rotate sideways.
-          Point the camera at the tread so grooves run <span className="text-white">left-to-right</span> inside the blue bracket.
+          Fill the blue box with tread — move closer until grooves fill most of the bracket.
         </p>
       </div>
 

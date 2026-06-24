@@ -1,12 +1,13 @@
+import { SCAN_ROI } from './scanRoi.js';
+
 /**
- * Laplacian variance blur score on the tread ROI.
+ * Laplacian variance blur score on the scan ROI.
  * Higher = sharper. Typical phone tread shots: sharp > 120, blurry < 60.
  */
 export const MIN_BLUR_SCORE = 80;
 
 export function measureBlurScore(videoElement, {
-  roiX = 0.30,
-  roiW = 0.40,
+  roi = SCAN_ROI,
   sampleWidth = 320
 } = {}) {
   if (!videoElement || videoElement.readyState < 2) return 0;
@@ -15,17 +16,19 @@ export function measureBlurScore(videoElement, {
   const vh = videoElement.videoHeight;
   if (!vw || !vh) return 0;
 
-  const sx = Math.floor(vw * roiX);
-  const sw = Math.floor(vw * roiW);
+  const sx = Math.floor(vw * roi.x);
+  const sy = Math.floor(vh * roi.y);
+  const sw = Math.floor(vw * roi.w);
+  const sh = Math.floor(vh * roi.h);
   const scale = sampleWidth / sw;
   const dw = sampleWidth;
-  const dh = Math.max(1, Math.round(vh * scale));
+  const dh = Math.max(1, Math.round(sh * scale));
 
   const canvas = document.createElement('canvas');
   canvas.width = dw;
   canvas.height = dh;
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  ctx.drawImage(videoElement, sx, 0, sw, vh, 0, 0, dw, dh);
+  ctx.drawImage(videoElement, sx, sy, sw, sh, 0, 0, dw, dh);
 
   const { data, width, height } = ctx.getImageData(0, 0, dw, dh);
   const gray = new Float32Array(width * height);

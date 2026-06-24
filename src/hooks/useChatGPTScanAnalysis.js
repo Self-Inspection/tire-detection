@@ -20,7 +20,7 @@ export default function useChatGPTScanAnalysis({
   const [scanResult, setScanResult] = useState(null);
   const [analysisError, setAnalysisError] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [lastNotes, setLastNotes] = useState('Align tread in the bracket — grooves run left-to-right. Tap Capture.');
+  const [lastNotes, setLastNotes] = useState('Fill the blue box with tire tread, then tap Capture.');
   const [attempt, setAttempt] = useState(0);
 
   const apiAttempts = useRef(0);
@@ -93,7 +93,7 @@ export default function useChatGPTScanAnalysis({
           setIsAnalyzing(false);
           setLastNotes(
             parsed.grooves.length === 0
-              ? `No grooves detected. Center tread in bracket and tap Capture (${apiAttempts.current}/${MAX_ATTEMPTS}).`
+              ? `No grooves detected. Fill the blue box with tread and tap Capture (${apiAttempts.current}/${MAX_ATTEMPTS}).`
               : `Low confidence (${Math.round(parsed.confidence * 100)}%). Improve lighting and tap Capture again.`
           );
           return;

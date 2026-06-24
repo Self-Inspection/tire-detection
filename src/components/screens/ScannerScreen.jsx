@@ -3,6 +3,7 @@ import useCamera from '../../hooks/useCamera.js';
 import useChatGPTScanAnalysis from '../../hooks/useChatGPTScanAnalysis.js';
 import GuidanceOverlay from '../ui/GuidanceOverlay.jsx';
 import ProgressRing from '../ui/ProgressRing.jsx';
+import { SCAN_ROI_STYLE } from '../../utils/scanRoi.js';
 
 export default function ScannerScreen({ tireType, scanConfig, onComplete, onCancel }) {
   const videoRef = useRef(null);
@@ -96,7 +97,7 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-[1]">
           <div
             className="border-2 border-blue-400/60 rounded-lg pointer-events-none"
-            style={{ width: '40%', height: '55%', boxShadow: '0 0 0 2000px rgba(0,0,0,0.20)' }}
+            style={{ ...SCAN_ROI_STYLE, boxShadow: '0 0 0 2000px rgba(0,0,0,0.20)' }}
           />
         </div>
       )}
@@ -127,7 +128,7 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
             <p className="text-white/60 text-xs text-center pointer-events-none">
               {isAnalyzing
                 ? 'Sending photo for groove analysis…'
-                : 'Grooves run left-to-right in bracket. Tap Capture'}
+                : 'Fill the blue box with tread — move closer if needed'}
             </p>
             {lastNotes && (
               <p className="text-white/40 text-[10px] text-center line-clamp-3 pointer-events-none">
