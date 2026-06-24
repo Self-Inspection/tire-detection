@@ -1,0 +1,26 @@
+---
+description: Auto-deploy to Railway after code changes — no confirmation needed
+alwaysApply: true
+---
+
+# Railway deployment
+
+After completing code changes for this project, **commit and push to `main` automatically** to trigger Railway production deploy. Do not ask "Want me to deploy?" — just deploy.
+
+## Workflow
+
+1. Finish the requested change and verify build (`npm run build`) when practical.
+2. Commit with a concise message (user did not need to ask for commits when deploying).
+3. `git push origin main`
+4. Confirm deploy with `railway status` (optional: curl the production URL).
+
+## Production
+
+- URL: https://tire-detection-production.up.railway.app
+- Railway auto-deploys from `main` on push.
+
+## Skip deploy only when
+
+- User explicitly says not to deploy, or only wants local changes.
+- Changes are docs-only / experimental and user asked to hold off.
+- Push would fail (fix first, then deploy without asking).
