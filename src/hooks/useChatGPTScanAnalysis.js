@@ -1,13 +1,11 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { captureVideoFrame } from '../utils/captureFrame.js';
 import { analyzeTireFrame } from '../utils/analyzeFrame.js';
 import { buildUserPrompt, getTargetDistanceCm } from '../utils/tireAnalysisPrompt.js';
 import { parseChatGPTAnalysis, isBlockedGuidance } from '../utils/parseChatGPTAnalysis.js';
 import { clamp32nds, getSafetyLevelFrom32nds, MM_PER_32ND } from '../utils/depthToTread.js';
+import { isSharpEnough, measureBlurScore, MIN_BLUR_SCORE } from '../utils/imageQuality.js';
 
-// One photo → one API call. Retry only if framing is bad (max 3 attempts).
-const CAPTURE_DELAY_MS = 1200;
-const RETRY_DELAY_MS = 2000;
 const MAX_ATTEMPTS = 3;
 
 export default function useChatGPTScanAnalysis({
@@ -16,136 +14,128 @@ export default function useChatGPTScanAnalysis({
   tireType,
   scanConfig
 }) {
-  const [guidance, setGuidance] = useState(null);
+  const [guidance, setGuidance] = useState('keep_going');
   const [progress, setProgress] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
   const [scanResult, setScanResult] = useState(null);
   const [analysisError, setAnalysisError] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [lastNotes, setLastNotes] = useState('');
+  const [lastNotes, setLastNotes] = useState('Align tread in the bracket, hold steady, then tap Capture.');
   const [attempt, setAttempt] = useState(0);
 
-  const running = useRef(false);
+  const apiAttempts = useRef(0);
   const tireTypeRef = useRef(tireType);
   const scanConfigRef = useRef(scanConfig);
 
-  useEffect(() => { tireTypeRef.current = tireType; }, [tireType]);
-  useEffect(() => { scanConfigRef.current = scanConfig; }, [scanConfig]);
+  tireTypeRef.current = tireType;
+  scanConfigRef.current = scanConfig;
 
-  useEffect(() => {
-    if (!isReady || !scanConfig?.systemPrompt) return;
+  const triggerCapture = useCallback(async () => {
+    if (!isReady || isAnalyzing || isComplete) return;
 
-    running.current = true;
-    let timerId = null;
-    let attempts = 0;
+    const video = videoRef.current;
+    const config = scanConfigRef.current;
+    if (!video || !config?.systemPrompt) return;
 
-    async function analyzeOnce() {
-      if (!running.current) return;
+    const blurScore = measureBlurScore(video);
+    if (!isSharpEnough(video)) {
+      setGuidance('move_slower');
+      setLastNotes(`Photo too blurry (score ${Math.round(blurScore)}/${MIN_BLUR_SCORE}). Hold steadier and tap Capture again.`);
+      return;
+    }
 
-      const video = videoRef.current;
-      const config = scanConfigRef.current;
-      if (!video || !config?.systemPrompt) return;
+    const imageBase64 = captureVideoFrame(video);
+    if (!imageBase64) {
+      setLastNotes('Camera not ready — wait a moment and try again.');
+      return;
+    }
 
-      const imageBase64 = captureVideoFrame(video);
-      if (!imageBase64) {
-        timerId = setTimeout(analyzeOnce, 500);
+    apiAttempts.current += 1;
+    setAttempt(apiAttempts.current);
+    setIsAnalyzing(true);
+    setAnalysisError(null);
+    setProgress(0.4);
+    setLastNotes('Analyzing tread grooves…');
+
+    try {
+      const analysis = await analyzeTireFrame({
+        imageBase64,
+        systemPrompt: config.systemPrompt,
+        userPrompt: buildUserPrompt({
+          tireType: tireTypeRef.current,
+          targetDistanceCm: getTargetDistanceCm(tireTypeRef.current)
+        })
+      });
+
+      setProgress(0.85);
+      const parsed = parseChatGPTAnalysis(analysis);
+      setGuidance(parsed.guidance);
+      setLastNotes(parsed.notes);
+
+      const blocked = isBlockedGuidance(parsed.guidance);
+
+      if (blocked && apiAttempts.current < MAX_ATTEMPTS) {
+        setProgress(0);
+        setIsAnalyzing(false);
+        setLastNotes(`${parsed.notes || 'Adjust framing.'} Tap Capture to retry (${apiAttempts.current}/${MAX_ATTEMPTS}).`);
         return;
       }
 
-      attempts += 1;
-      setAttempt(attempts);
-      setIsAnalyzing(true);
-      setAnalysisError(null);
-      setProgress(0.3);
+      if (blocked) {
+        setAnalysisError(parsed.notes || 'Could not read tread. Adjust angle and try again.');
+        setIsAnalyzing(false);
+        return;
+      }
 
-      try {
-        const analysis = await analyzeTireFrame({
-          imageBase64,
-          systemPrompt: config.systemPrompt,
-          userPrompt: buildUserPrompt({
-            tireType: tireTypeRef.current,
-            targetDistanceCm: getTargetDistanceCm(tireTypeRef.current)
-          })
-        });
+      let depth32nds = parsed.depth32nds;
+      let depthMm = parsed.depthMm;
 
-        if (!running.current) return;
+      if (depth32nds == null && depthMm != null) {
+        depth32nds = clamp32nds(Math.round(depthMm / MM_PER_32ND));
+      }
 
-        setProgress(0.85);
-        const parsed = parseChatGPTAnalysis(analysis);
-        setGuidance(parsed.guidance);
-        setLastNotes(parsed.notes);
-
-        const blocked = isBlockedGuidance(parsed.guidance) || parsed.guidance === 'tilt_phone';
-
-        // Framing bad — retry up to MAX_ATTEMPTS
-        if (blocked && attempts < MAX_ATTEMPTS) {
-          setProgress(0.1);
+      if (depth32nds == null || parsed.confidence < 0.6) {
+        if (apiAttempts.current < MAX_ATTEMPTS) {
+          setProgress(0);
           setIsAnalyzing(false);
-          timerId = setTimeout(analyzeOnce, RETRY_DELAY_MS);
+          setLastNotes(
+            parsed.confidence < 0.6
+              ? `Low confidence (${Math.round(parsed.confidence * 100)}%). Improve lighting and tap Capture again.`
+              : `No depth reading. Tap Capture to retry (${apiAttempts.current}/${MAX_ATTEMPTS}).`
+          );
           return;
         }
+        setAnalysisError('Could not measure tread depth confidently. Try better lighting or a closer angle.');
+        setIsAnalyzing(false);
+        return;
+      }
 
-        if (blocked) {
-          setAnalysisError(parsed.notes || 'Could not read tread. Adjust angle and try again.');
-          setIsAnalyzing(false);
-          return;
-        }
+      depth32nds = clamp32nds(depth32nds);
+      depthMm = depthMm ?? parseFloat((depth32nds * MM_PER_32ND).toFixed(1));
 
-        // Accept measurement from this single frame
-        let depth32nds = parsed.depth32nds;
-        let depthMm = parsed.depthMm;
-
-        if (depth32nds == null && depthMm != null) {
-          depth32nds = clamp32nds(Math.round(depthMm / MM_PER_32ND));
-        }
-        if (depth32nds == null) {
-          if (attempts < MAX_ATTEMPTS) {
-            setIsAnalyzing(false);
-            timerId = setTimeout(analyzeOnce, RETRY_DELAY_MS);
-            return;
-          }
-          setAnalysisError('Could not measure tread depth. Try better lighting or move closer.');
-          setIsAnalyzing(false);
-          return;
-        }
-
-        depth32nds = clamp32nds(depth32nds);
-        depthMm = depthMm ?? parseFloat((depth32nds * MM_PER_32ND).toFixed(1));
-
-        setScanResult({
-          depthMm,
-          depth32nds,
-          rating: getSafetyLevelFrom32nds(depth32nds),
-          source: 'chatgpt',
-          confidence: parsed.confidence,
-          notes: parsed.notes
-        });
-        setProgress(1);
-        setIsComplete(true);
-        running.current = false;
-      } catch (err) {
-        if (!running.current) return;
-        if (attempts < MAX_ATTEMPTS) {
-          setIsAnalyzing(false);
-          timerId = setTimeout(analyzeOnce, RETRY_DELAY_MS);
-          return;
-        }
+      setScanResult({
+        depthMm,
+        depth32nds,
+        rating: getSafetyLevelFrom32nds(depth32nds),
+        source: 'chatgpt',
+        confidence: parsed.confidence,
+        notes: parsed.notes
+      });
+      setProgress(1);
+      setIsComplete(true);
+    } catch (err) {
+      if (apiAttempts.current < MAX_ATTEMPTS) {
+        setLastNotes(`${err.message}. Tap Capture to retry.`);
+      } else {
         setAnalysisError(err.message || 'Analysis failed');
         setGuidance('tilt_phone');
-      } finally {
-        setIsAnalyzing(false);
       }
+    } finally {
+      setIsAnalyzing(false);
     }
+  }, [isReady, isAnalyzing, isComplete, videoRef]);
 
-    setGuidance('keep_going');
-    setLastNotes('Point camera at tread in the bracket…');
-    timerId = setTimeout(analyzeOnce, CAPTURE_DELAY_MS);
-
-    return () => {
-      running.current = false;
-      if (timerId) clearTimeout(timerId);
-    };
-  }, [isReady, scanConfig?.systemPrompt, videoRef]);
+  const canCapture = isReady && !isAnalyzing && !isComplete && apiAttempts.current < MAX_ATTEMPTS;
 
   return {
     guidance,
@@ -156,6 +146,8 @@ export default function useChatGPTScanAnalysis({
     isAnalyzing,
     lastNotes,
     attempt,
-    maxAttempts: MAX_ATTEMPTS
+    maxAttempts: MAX_ATTEMPTS,
+    triggerCapture,
+    canCapture
   };
 }

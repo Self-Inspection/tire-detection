@@ -7,7 +7,7 @@ const app = express();
 const PORT = parseInt(process.env.PORT, 10) || 3001;
 const isProd = process.env.NODE_ENV === 'production';
 
-app.use(express.json({ limit: '12mb' }));
+app.use(express.json({ limit: '20mb' }));
 
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
 
@@ -81,7 +81,7 @@ app.post('/api/analyze-frame', async (req, res) => {
             role: 'user',
             content: [
               { type: 'text', text: userPrompt || 'Analyze this tire scan frame and return strict JSON.' },
-              { type: 'image_url', image_url: { url: imageUrl, detail: 'low' } }
+              { type: 'image_url', image_url: { url: imageUrl, detail: 'high' } }
             ]
           }
         ]

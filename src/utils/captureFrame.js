@@ -1,9 +1,10 @@
 /**
  * Capture a JPEG base64 data URL from a live video element.
- * Draws the center ROI bracket region to match on-screen guidance.
+ * Crops the center ROI bracket region to match on-screen guidance.
  */
 export function captureVideoFrame(videoElement, {
-  maxWidth = 480,
+  maxWidth = 1280,
+  quality = 0.85,
   roiX = 0.30,
   roiW = 0.40
 } = {}) {
@@ -25,5 +26,5 @@ export function captureVideoFrame(videoElement, {
   const ctx = canvas.getContext('2d');
   ctx.drawImage(videoElement, sx, 0, sw, vh, 0, 0, dw, dh);
 
-  return canvas.toDataURL('image/jpeg', 0.6);
+  return canvas.toDataURL('image/jpeg', quality);
 }

@@ -19,7 +19,9 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
     isAnalyzing,
     lastNotes,
     attempt,
-    maxAttempts
+    maxAttempts,
+    triggerCapture,
+    canCapture
   } = useChatGPTScanAnalysis({
     videoRef,
     isReady,
@@ -97,15 +99,28 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
       )}
 
       {!loading && (
-        <div className="absolute bottom-0 left-0 right-0 safe-bottom flex flex-col items-center pb-8 gap-2 z-10">
-          <ProgressRing progress={progress} />
-          <p className="text-white/60 text-xs">
-            {isAnalyzing ? 'Sending one photo for analysis…' : 'Hold steady — one photo will be taken'}
+        <div className="absolute bottom-0 left-0 right-0 safe-bottom flex flex-col items-center pb-8 gap-3 z-10 px-6">
+          {isAnalyzing && <ProgressRing progress={progress} />}
+          <p className="text-white/60 text-xs text-center">
+            {isAnalyzing
+              ? 'Sending photo for groove analysis…'
+              : 'Align tread in bracket, hold steady, tap Capture'}
           </p>
           {lastNotes && (
-            <p className="text-white/40 text-[10px] px-6 text-center line-clamp-2">
-              {lastNotes}{attempt > 1 ? ` (attempt ${attempt}/${maxAttempts})` : ''}
+            <p className="text-white/40 text-[10px] text-center line-clamp-3">
+              {lastNotes}{attempt > 0 && !isAnalyzing ? ` (${attempt}/${maxAttempts})` : ''}
             </p>
+          )}
+          {!isAnalyzing && (
+            <button
+              onClick={triggerCapture}
+              disabled={!canCapture}
+              style={{ touchAction: 'manipulation' }}
+              className="w-full max-w-xs py-4 rounded-xl bg-blue-600 text-white font-semibold text-base
+                disabled:opacity-40 disabled:cursor-not-allowed active:bg-blue-700"
+            >
+              Capture
+            </button>
           )}
         </div>
       )}
