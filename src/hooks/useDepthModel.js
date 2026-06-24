@@ -17,6 +17,7 @@ export default function useDepthModel({ enabled = true } = {}) {
   const [modelError, setModelError]       = useState(null);
   const estimatorRef    = useRef(null);
   const lastFrameRef    = useRef(0);
+  const inferenceErrRef = useRef(false);
 
   useEffect(() => {
     if (!enabled) return;
@@ -40,7 +41,8 @@ export default function useDepthModel({ enabled = true } = {}) {
         // Apply a hard timeout so the spinner never hangs indefinitely.
         const estimator = await withTimeout(
           depthEstimation.createEstimator(
-            depthEstimation.SupportedModels.ARPortraitDepth
+            depthEstimation.SupportedModels.ARPortraitDepth,
+            { runtime: 'tfjs' }
           ),
           MODEL_LOAD_TIMEOUT_MS,
           'Depth model'
@@ -78,10 +80,14 @@ export default function useDepthModel({ enabled = true } = {}) {
       const tensor = depthMap.depthTensor;
       const [height, width] = tensor.shape;
       const rawData = await tensor.data(); // Float32Array
-      depthMap.dispose();
+      tensor.dispose(); // dispose the tensor we hold; depthMap has no .dispose() in 0.0.3
 
       return { data: new Float32Array(rawData), width, height };
-    } catch {
+    } catch (err) {
+      if (!inferenceErrRef.current) {
+        inferenceErrRef.current = true;
+        setModelError('Depth inference failed: ' + err.message);
+      }
       return null;
     }
   }, []);

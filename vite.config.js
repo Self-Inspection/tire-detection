@@ -4,6 +4,9 @@ import basicSsl from '@vitejs/plugin-basic-ssl';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig(({ command }) => ({
+  define: {
+    __BUILD_TIME__: JSON.stringify(new Date().toISOString())
+  },
   plugins: [
     react(),
     // Only use self-signed SSL for local dev; Railway terminates HTTPS at the proxy

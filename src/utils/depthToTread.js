@@ -16,13 +16,28 @@ export function getSafetyLevel(depthMm) {
   return 'danger';
 }
 
-// Estimated focal length for a typical phone rear camera (~4mm lens, ~6mm sensor, 1280px wide)
+// Estimated focal length for a typical phone rear camera (~4mm lens, ~6mm sensor, 1280px wide).
+// Used only as a fallback — WebXR supplies the device's true focal length when available.
 const DEFAULT_FOCAL_PX = 853;
 // Fraction of frame width the guided bracket covers at calibration distance
 const BRACKET_FRACTION = 0.60;
 // Empirical scale factor tuning constant.
 // Calibrate against a known tire (e.g., new tire = 8mm) and adjust until readings match.
 const DEPTH_SCALE_TUNE = 0.5;
+
+// Reference capture width the focal length is expressed in (matches useWebXR.js).
+const REF_FRAME_WIDTH = 1280;
+
+// mm of real depth per unit of normalized depth delta, via tread-width calibration.
+// Prefers the device's true focal length (from WebXR) over the generic estimate.
+function focalScaleMmPerUnit(treadWidthMm, focalLengthPx) {
+  const refWidthMm   = treadWidthMm ?? 190;
+  const treadWidthPx = REF_FRAME_WIDTH * BRACKET_FRACTION;
+  const f            = (focalLengthPx && focalLengthPx > 0) ? focalLengthPx : DEFAULT_FOCAL_PX;
+  // Z at calibration point (mm): Z = f * W_mm / W_px
+  const Z_surface_mm = f * (refWidthMm / treadWidthPx);
+  return Z_surface_mm * DEPTH_SCALE_TUNE;
+}
 
 /**
  * Converts a 32x32 downsampled depth ROI (Float32Array, values 0–1) into a groove depth.
@@ -32,10 +47,10 @@ const DEPTH_SCALE_TUNE = 0.5;
  * Groove bottoms are farther → higher values.
  *
  * @param {Float32Array} depthRoi - 32x32 depth values
- * @param {{ treadWidthMm: number, metricsScaleFactor: number|null }} config
+ * @param {{ treadWidthMm: number, metricsScaleFactor: number|null, focalLengthPx: number|null }} config
  * @returns {{ depthMm: number, depth32nds: number } | null}
  */
-export function computeGrooveDepth(depthRoi, { treadWidthMm, metricsScaleFactor } = {}) {
+export function computeGrooveDepth(depthRoi, { treadWidthMm, metricsScaleFactor, focalLengthPx } = {}) {
   let min = Infinity, max = -Infinity;
   for (const v of depthRoi) {
     if (v < min) min = v;
@@ -67,15 +82,8 @@ export function computeGrooveDepth(depthRoi, { treadWidthMm, metricsScaleFactor 
     // Use it to scale the normalized depth delta
     depthMm = depthDelta * metricsScaleFactor * 1000 * DEPTH_SCALE_TUNE;
   } else {
-    // Estimate scale from tread width calibration
-    const refWidthMm = treadWidthMm ?? 190;
-    const frameWidthPx = 1280; // assume ideal capture width
-    const treadWidthPx = frameWidthPx * BRACKET_FRACTION;
-    // Z at calibration point (meters): Z = f * W_mm / W_px
-    const Z_surface_mm = DEFAULT_FOCAL_PX * (refWidthMm / treadWidthPx);
-    // Scale: mm of depth per normalized delta unit
-    const scaleMmPerUnit = Z_surface_mm * DEPTH_SCALE_TUNE;
-    depthMm = depthDelta * scaleMmPerUnit;
+    // Tread-width calibration, using the device's true focal length when WebXR provides it
+    depthMm = depthDelta * focalScaleMmPerUnit(treadWidthMm, focalLengthPx);
   }
 
   depthMm = Math.max(0.5, Math.min(20, depthMm));
@@ -84,4 +92,29 @@ export function computeGrooveDepth(depthRoi, { treadWidthMm, metricsScaleFactor 
     depthMm,
     depth32nds: Math.max(1, Math.round(depthMm / 0.794)) // 1/32" = 0.794mm
   };
+}
+
+/**
+ * Fallback when bimodal peaks aren't detectable.
+ * Uses the P10–P90 depth range within the ROI as a proxy for groove depth.
+ * Less accurate than bimodal analysis but always produces a value.
+ */
+export function computeFallbackGrooveDepth(depthRoi, { treadWidthMm, metricsScaleFactor, focalLengthPx } = {}) {
+  const sorted = Float32Array.from(depthRoi).sort();
+  const n = sorted.length;
+  const p10 = sorted[Math.floor(n * 0.10)];
+  const p90 = sorted[Math.floor(n * 0.90)];
+  const depthDelta = p90 - p10;
+
+  if (depthDelta < 0.015) return null; // ROI is flat — likely not on a tire
+
+  let depthMm;
+  if (metricsScaleFactor != null && metricsScaleFactor > 0) {
+    depthMm = depthDelta * metricsScaleFactor * 1000 * DEPTH_SCALE_TUNE;
+  } else {
+    depthMm = depthDelta * focalScaleMmPerUnit(treadWidthMm, focalLengthPx);
+  }
+
+  depthMm = Math.max(0.5, Math.min(20, depthMm));
+  return { depthMm, depth32nds: Math.max(1, Math.round(depthMm / 0.794)) };
 }
