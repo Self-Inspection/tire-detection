@@ -129,7 +129,7 @@ export default function useChatGPTScanAnalysis({
     }
   }, [isReady, isAnalyzing, isComplete, videoRef]);
 
-  const canCapture = isReady && !isAnalyzing && !isComplete && apiAttempts.current < MAX_ATTEMPTS;
+  const canCapture = isReady && !isAnalyzing && !isComplete && attempt < MAX_ATTEMPTS;
 
   return {
     guidance,
