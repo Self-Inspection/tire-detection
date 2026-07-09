@@ -4,6 +4,8 @@ export default function useCamera(videoRef) {
   const [stream, setStream]   = useState(null);
   const [error, setError]     = useState(null);
   const [isReady, setIsReady] = useState(false);
+  const [hasTorch, setHasTorch] = useState(false);
+  const [torchOn, setTorchOn] = useState(false);
   const streamRef = useRef(null);
 
   useEffect(() => {
@@ -25,6 +27,9 @@ export default function useCamera(videoRef) {
 
         streamRef.current = s;
         setStream(s);
+
+        const [track] = s.getVideoTracks();
+        setHasTorch(Boolean(track?.getCapabilities?.().torch));
 
         const video = videoRef.current;
         if (!video) return;
@@ -61,9 +66,23 @@ export default function useCamera(videoRef) {
       streamRef.current?.getTracks().forEach(t => t.stop());
       streamRef.current = null;
       setIsReady(false);
+      setHasTorch(false);
+      setTorchOn(false);
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { stream, error, isReady };
+  async function toggleTorch() {
+    const [track] = streamRef.current?.getVideoTracks() ?? [];
+    if (!track) return;
+    const next = !torchOn;
+    try {
+      await track.applyConstraints({ advanced: [{ torch: next }] });
+      setTorchOn(next);
+    } catch {
+      // torch toggle unsupported mid-stream on this device — ignore
+    }
+  }
+
+  return { stream, error, isReady, hasTorch, torchOn, toggleTorch };
 }

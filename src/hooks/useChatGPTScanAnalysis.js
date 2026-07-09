@@ -12,7 +12,10 @@ import {
   measureBlurScore,
   MIN_BLUR_SCORE,
   selectSharpBurstFrames,
-  bestBurstScore
+  bestBurstScore,
+  measureLighting,
+  MIN_BRIGHTNESS,
+  MAX_GLARE_FRACTION
 } from '../utils/imageQuality.js';
 
 const MAX_ATTEMPTS = 3;
@@ -59,7 +62,8 @@ export default function useChatGPTScanAnalysis({
     for (let i = 0; i < BURST_COUNT; i++) {
       scoredFrames.push({
         frame: captureVideoFrame(video),
-        score: measureBlurScore(video)
+        score: measureBlurScore(video),
+        lighting: measureLighting(video)
       });
       if (i < BURST_COUNT - 1) await delay(BURST_INTERVAL_MS);
     }
@@ -74,7 +78,23 @@ export default function useChatGPTScanAnalysis({
       return;
     }
 
-    const imagesBase64 = sharpFrames.map(f => f.frame);
+    const wellLitFrames = sharpFrames.filter(
+      f => f.lighting.brightness >= MIN_BRIGHTNESS && f.lighting.glareFraction <= MAX_GLARE_FRACTION
+    );
+
+    if (wellLitFrames.length === 0) {
+      setGuidance('poor_lighting');
+      const darkest = Math.round(Math.min(...sharpFrames.map(f => f.lighting.brightness)));
+      const glariest = Math.max(...sharpFrames.map(f => f.lighting.glareFraction));
+      setLastNotes(
+        glariest > MAX_GLARE_FRACTION
+          ? 'Glare is washing out the tread — angle away from direct light/flash reflection and tap Capture again.'
+          : `Too dark (brightness ${darkest}/${MIN_BRIGHTNESS}) — add more light and tap Capture again.`
+      );
+      return;
+    }
+
+    const imagesBase64 = wellLitFrames.map(f => f.frame);
 
     apiAttempts.current += 1;
     setAttempt(apiAttempts.current);
@@ -140,7 +160,8 @@ export default function useChatGPTScanAnalysis({
         source: 'chatgpt',
         confidence: parsed.confidence,
         notes: parsed.notes,
-        photoCount: imagesBase64.length
+        photoCount: imagesBase64.length,
+        treadPattern: parsed.treadPattern
       });
       setProgress(1);
       setIsComplete(true);

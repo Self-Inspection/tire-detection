@@ -2,6 +2,7 @@ const MESSAGES = {
   too_far:    { text: 'Move closer, then tap Capture', icon: '↕', color: 'bg-yellow-600' },
   too_close:  { text: 'Move back a little',            icon: '↕', color: 'bg-yellow-600' },
   move_slower:{ text: 'Hold steady, then tap Capture', icon: '📸', color: 'bg-orange-500' },
+  poor_lighting:{ text: 'Improve lighting, avoid glare', icon: '💡', color: 'bg-orange-500' },
   tilt_phone: { text: 'Point camera at tread',         icon: '📐', color: 'bg-yellow-600' },
   keep_going: { text: 'Tap Capture when ready',        icon: '📸', color: 'bg-blue-700' },
   almost_done:{ text: 'Tap Capture now',               icon: '📸', color: 'bg-green-600' }
