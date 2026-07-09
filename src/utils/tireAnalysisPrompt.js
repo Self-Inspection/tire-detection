@@ -1,7 +1,5 @@
 import { MAX_GROOVES } from './depthToTread.js';
 
-export const OPENAI_MODEL = 'gpt-4o';
-
 export const GUIDANCE_VALUES = [
   'tilt_phone',
   'too_far',
