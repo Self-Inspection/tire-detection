@@ -9,7 +9,7 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
   const videoRef = useRef(null);
   const [showConfirm, setShowConfirm] = useState(false);
 
-  const { error: cameraError, isReady } = useCamera(videoRef);
+  const { error: cameraError, isReady, hasTorch, torchOn, toggleTorch } = useCamera(videoRef);
 
   const {
     guidance,
@@ -108,6 +108,22 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
             className="border-2 border-blue-400/60 rounded-lg pointer-events-none"
             style={{ ...SCAN_ROI_STYLE, boxShadow: '0 0 0 2000px rgba(0,0,0,0.20)' }}
           />
+        </div>
+      )}
+
+      {/* Torch — top left */}
+      {!loading && hasTorch && (
+        <div className="absolute top-0 left-0 safe-top p-4 z-50">
+          <button
+            type="button"
+            onClick={toggleTorch}
+            style={{ touchAction: 'manipulation' }}
+            className={`backdrop-blur text-white text-sm px-4 py-2 rounded-lg ${
+              torchOn ? 'bg-yellow-500/80 text-black' : 'bg-black/50'
+            }`}
+          >
+            {torchOn ? '💡 On' : '💡 Light'}
+          </button>
         </div>
       )}
 

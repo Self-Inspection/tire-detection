@@ -8,7 +8,7 @@ import {
 } from './depthToTread.js';
 import { GUIDANCE_VALUES } from './tireAnalysisPrompt.js';
 
-const BLOCKED_GUIDANCE = new Set(['move_slower', 'too_far', 'too_close', 'tilt_phone']);
+const BLOCKED_GUIDANCE = new Set(['move_slower', 'too_far', 'too_close', 'tilt_phone', 'poor_lighting']);
 
 function formatGroove(g, index, position) {
   const depth32nds = clamp32nds(g.depth_32nds);
@@ -67,12 +67,14 @@ export function parseChatGPTAnalysis(raw) {
       readyToComplete: false,
       confidence: 0,
       notes: 'Invalid analysis response',
-      grooveVisible: false
+      grooveVisible: false,
+      treadPattern: 'unknown'
     };
   }
 
   const guidance = normalizeGuidance(raw.guidance);
   const grooveVisible = raw.frame_quality?.groove_visible !== false;
+  const treadPattern = raw.frame_quality?.tread_pattern ?? 'unknown';
   const grooves = parseGrooves(raw);
 
   let depth32nds = typeof raw.measurement?.depth_32nds === 'number'
@@ -107,7 +109,8 @@ export function parseChatGPTAnalysis(raw) {
     confidence,
     notes: raw.notes || '',
     grooveVisible,
-    grooveCount: grooves.length
+    grooveCount: grooves.length,
+    treadPattern
   };
 }
 

@@ -117,8 +117,11 @@ export default function SetupScreen({ onBeginScan }) {
         </div>
         <p className="text-xs text-gray-400 mt-2">
           Hold phone <span className="text-white">upright in portrait</span> — do not rotate sideways.
-          Point at the tread from the side; grooves appear as <span className="text-white">vertical lines</span> in the blue box.
-          Tap <span className="text-white">Capture</span> when the tread fills the box.
+          Point at the tread from the side, straight on. Fill the blue box with the tread and let
+          <span className="text-white"> at least 2 full pattern repeats</span> show — angled or V-shaped
+          (directional/chevron) grooves are fine, just don't crop them off.
+          Even, indirect light works best — use the light button if part of the tread is in shadow.
+          Tap <span className="text-white">Capture</span> when ready.
         </p>
       </div>
 

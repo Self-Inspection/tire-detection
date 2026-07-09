@@ -9,10 +9,26 @@ const isProd = process.env.NODE_ENV === 'production';
 
 app.use(express.json({ limit: '20mb' }));
 
-const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
+// Vision provider selection. Both speak the OpenAI Chat Completions format —
+// Gemini via Google's OpenAI-compatible endpoint — so the request body is shared.
+const PROVIDERS = {
+  openai: {
+    url: 'https://api.openai.com/v1/chat/completions',
+    keyEnv: 'OPENAI_API_KEY',
+    model: process.env.OPENAI_MODEL || 'gpt-5.1'
+  },
+  gemini: {
+    url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+    keyEnv: 'GEMINI_API_KEY',
+    model: process.env.GEMINI_MODEL || 'gemini-3.1-pro-preview'
+  }
+};
+
+const PROVIDER_NAME = (process.env.AI_PROVIDER || 'openai').toLowerCase();
+const PROVIDER = PROVIDERS[PROVIDER_NAME] ?? PROVIDERS.openai;
 
 function resolveApiKey() {
-  return process.env.OPENAI_API_KEY || null;
+  return process.env[PROVIDER.keyEnv] || null;
 }
 
 function extractJson(text) {
@@ -36,8 +52,9 @@ function extractJson(text) {
 app.get('/api/health', (_req, res) => {
   res.json({
     ok: true,
-    hasServerKey: Boolean(process.env.OPENAI_API_KEY),
-    model: OPENAI_MODEL
+    provider: PROVIDER_NAME,
+    hasServerKey: Boolean(resolveApiKey()),
+    model: PROVIDER.model
   });
 });
 
@@ -53,7 +70,7 @@ app.post('/api/analyze-frame', async (req, res) => {
 
   if (!apiKey) {
     return res.status(401).json({
-      error: 'OpenAI API key is not configured on the server.'
+      error: `${PROVIDER.keyEnv} is not configured on the server (provider: ${PROVIDER_NAME}).`
     });
   }
 
@@ -72,40 +89,45 @@ app.post('/api/analyze-frame', async (req, res) => {
     return { type: 'image_url', image_url: { url: imageUrl, detail: 'high' } };
   });
 
+  const body = {
+    model: PROVIDER.model,
+    response_format: { type: 'json_object' },
+    messages: [
+      { role: 'system', content: systemPrompt },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: userPrompt || 'Analyze these tire tread photos and return strict JSON.' },
+          ...imageParts
+        ]
+      }
+    ]
+  };
+  // GPT-5-series reasoning models reject non-default temperature
+  if (!/^gpt-5/.test(PROVIDER.model)) {
+    body.temperature = 0.2;
+  }
+
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetch(PROVIDER.url, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        model: OPENAI_MODEL,
-        temperature: 0.2,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: systemPrompt },
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: userPrompt || 'Analyze these tire tread photos and return strict JSON.' },
-              ...imageParts
-            ]
-          }
-        ]
-      })
+      body: JSON.stringify(body)
     });
 
     const payload = await response.json();
 
     if (!response.ok) {
-      const message = payload?.error?.message || `OpenAI request failed (${response.status})`;
+      const message = payload?.error?.message || `${PROVIDER_NAME} request failed (${response.status})`;
       return res.status(response.status).json({ error: message });
     }
 
     const content = payload.choices?.[0]?.message?.content;
     if (!content) {
-      return res.status(502).json({ error: 'OpenAI returned an empty response.' });
+      return res.status(502).json({ error: `${PROVIDER_NAME} returned an empty response.` });
     }
 
     const analysis = extractJson(content);

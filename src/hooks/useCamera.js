@@ -4,6 +4,8 @@ export default function useCamera(videoRef) {
   const [stream, setStream]   = useState(null);
   const [error, setError]     = useState(null);
   const [isReady, setIsReady] = useState(false);
+  const [hasTorch, setHasTorch] = useState(false);
+  const [torchOn, setTorchOn] = useState(false);
   const streamRef = useRef(null);
 
   useEffect(() => {
@@ -11,11 +13,13 @@ export default function useCamera(videoRef) {
 
     async function start() {
       try {
-        // No `exact` on facingMode — throws OverconstrainedError on iOS
+        // No `exact` on facingMode — throws OverconstrainedError on iOS.
+        // 1080p ideal: the analysis crop is 90% of frame width, so a 720p
+        // source leaves too little detail to tell sipes from grooves.
         let s;
         try {
           s = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+            video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
           });
         } catch {
           s = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -25,6 +29,16 @@ export default function useCamera(videoRef) {
 
         streamRef.current = s;
         setStream(s);
+
+        const [track] = s.getVideoTracks();
+        const caps = track?.getCapabilities?.() ?? {};
+        setHasTorch(Boolean(caps.torch));
+
+        // Close-range tread shots need continuous autofocus where the browser
+        // exposes it (Android Chrome); unsupported devices throw or ignore.
+        if (Array.isArray(caps.focusMode) && caps.focusMode.includes('continuous')) {
+          track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
+        }
 
         const video = videoRef.current;
         if (!video) return;
@@ -61,9 +75,23 @@ export default function useCamera(videoRef) {
       streamRef.current?.getTracks().forEach(t => t.stop());
       streamRef.current = null;
       setIsReady(false);
+      setHasTorch(false);
+      setTorchOn(false);
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { stream, error, isReady };
+  async function toggleTorch() {
+    const [track] = streamRef.current?.getVideoTracks() ?? [];
+    if (!track) return;
+    const next = !torchOn;
+    try {
+      await track.applyConstraints({ advanced: [{ torch: next }] });
+      setTorchOn(next);
+    } catch {
+      // torch toggle unsupported mid-stream on this device — ignore
+    }
+  }
+
+  return { stream, error, isReady, hasTorch, torchOn, toggleTorch };
 }
