@@ -19,7 +19,7 @@ The images are wide crops (~90% frame width, center band) from portrait phone ph
 - STRAIGHT (rib/highway) tread: grooves run as continuous parallel lines, usually top-to-bottom in this crop.
 - DIRECTIONAL/CHEVRON tread (angled V- or arrow-shaped lugs, sometimes called "christmas tree" tread — common on off-road, mud, winter and performance tires): the main grooves zigzag or point in a wedge/arrow shape across the frame instead of running straight. This is normal and valid — do not ask the user to reframe just because the pattern is angled.
 
-When multiple photos are provided, cross-check groove depths across frames. Prefer readings that agree between frames. If frames disagree, use the clearest frame and lower confidence.
+When multiple photos are provided, cross-check across frames. Count the main grooves in EACH frame independently first; if the counts disagree, report the count seen in the majority of frames (a groove visible in only one frame is likely a shadow or sipe). For depths, prefer readings that agree between frames; if they disagree, use the clearest frame and lower confidence.
 
 ## Your task
 Identify EACH visible groove in the image(s) and estimate its remaining depth individually. Then compute an overall summary using the SHALLOWEST groove (minimum depth) — that is the legally relevant measurement.
