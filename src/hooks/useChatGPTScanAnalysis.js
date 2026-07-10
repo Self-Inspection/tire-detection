@@ -6,7 +6,11 @@ import {
 } from '../utils/captureFrame.js';
 import { analyzeTireFrame } from '../utils/analyzeFrame.js';
 import { buildUserPrompt, getTargetDistanceCm } from '../utils/tireAnalysisPrompt.js';
-import { parseChatGPTAnalysis, isBlockedGuidance } from '../utils/parseChatGPTAnalysis.js';
+import {
+  parseChatGPTAnalysis,
+  aggregateParsedAnalyses,
+  isBlockedGuidance
+} from '../utils/parseChatGPTAnalysis.js';
 import { getSafetyLevelFrom32nds, MM_PER_32ND } from '../utils/depthToTread.js';
 import {
   measureBlurScore,
@@ -103,7 +107,7 @@ export default function useChatGPTScanAnalysis({
     setLastNotes(`Analyzing ${imagesBase64.length} photo${imagesBase64.length > 1 ? 's' : ''}…`);
 
     try {
-      const analysis = await analyzeTireFrame({
+      const analyses = await analyzeTireFrame({
         imagesBase64,
         systemPrompt: config.systemPrompt,
         userPrompt: buildUserPrompt({
@@ -114,7 +118,7 @@ export default function useChatGPTScanAnalysis({
       });
 
       setProgress(0.85);
-      const parsed = parseChatGPTAnalysis(analysis);
+      const parsed = aggregateParsedAnalyses(analyses.map(parseChatGPTAnalysis));
       setGuidance(parsed.guidance);
       setLastNotes(parsed.notes);
 
@@ -140,7 +144,9 @@ export default function useChatGPTScanAnalysis({
           setLastNotes(
             parsed.grooves.length === 0
               ? `No grooves detected. Fill the blue box with tread and tap Capture (${apiAttempts.current}/${MAX_ATTEMPTS}).`
-              : `Low confidence (${Math.round(parsed.confidence * 100)}%). Improve lighting and tap Capture again.`
+              : parsed.agreement32nds >= 2
+                ? `Analysis runs disagreed by ${parsed.agreement32nds}/32″ — adjust light/angle and tap Capture again.`
+                : `Low confidence (${Math.round(parsed.confidence * 100)}%). Improve lighting and tap Capture again.`
           );
           return;
         }
@@ -161,7 +167,9 @@ export default function useChatGPTScanAnalysis({
         confidence: parsed.confidence,
         notes: parsed.notes,
         photoCount: imagesBase64.length,
-        treadPattern: parsed.treadPattern
+        treadPattern: parsed.treadPattern,
+        sampleCount: parsed.sampleCount ?? 1,
+        agreement32nds: parsed.agreement32nds ?? null
       });
       setProgress(1);
       setIsComplete(true);

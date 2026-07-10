@@ -117,3 +117,85 @@ export function parseChatGPTAnalysis(raw) {
 export function isBlockedGuidance(guidance) {
   return BLOCKED_GUIDANCE.has(guidance);
 }
+
+// Integer median; even-length ties round DOWN (shallower = safer to report).
+function median32nds(values) {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : Math.floor((sorted[mid - 1] + sorted[mid]) / 2);
+}
+
+function modalValue(values, tieBreak = () => 0) {
+  const freq = new Map();
+  for (const v of values) freq.set(v, (freq.get(v) ?? 0) + 1);
+  return [...freq.entries()].sort((a, b) => b[1] - a[1] || tieBreak(a[0], b[0]))[0][0];
+}
+
+/**
+ * Combine several independent model runs over the SAME photos into one result.
+ * Groove counts are settled by majority vote; depths by per-groove median.
+ * Wide disagreement between runs caps confidence so the retry path triggers
+ * instead of silently trusting one noisy run.
+ */
+export function aggregateParsedAnalyses(parsedRuns) {
+  const runs = (parsedRuns ?? []).filter(Boolean);
+  if (runs.length === 0) return parseChatGPTAnalysis(null);
+  if (runs.length === 1) return { ...runs[0], sampleCount: 1, agreement32nds: null };
+
+  const measurable = runs.filter(r => r.grooves.length > 0 && !isBlockedGuidance(r.guidance));
+
+  // Majority of runs rejected the photo → surface the most common rejection
+  if (measurable.length < Math.ceil(runs.length / 2)) {
+    const rejected = runs.filter(r => !measurable.includes(r));
+    const guidance = modalValue(rejected.map(r => r.guidance));
+    const base = rejected.find(r => r.guidance === guidance) ?? runs[0];
+    return { ...base, guidance, sampleCount: runs.length, agreement32nds: null };
+  }
+
+  // Majority groove count; ties prefer FEWER grooves (miscounts usually come
+  // from sipes/shadows padded in, not real grooves left out)
+  const grooveCount = modalValue(measurable.map(r => r.grooves.length), (a, b) => a - b);
+  const agreeing = measurable.filter(r => r.grooves.length === grooveCount);
+
+  const positions = groovePositionsForCount(grooveCount);
+  const grooves = positions.map((position, i) => {
+    const depths = agreeing.map(r => r.grooves[i].depth32nds);
+    const confs = agreeing.map(r => r.grooves[i].confidence).filter(c => typeof c === 'number');
+    const depth32nds = median32nds(depths);
+    return {
+      id: i + 1,
+      position,
+      positionLabel: GROOVE_POSITION_LABELS[position] ?? position,
+      depth32nds,
+      depthMm: parseFloat((depth32nds * MM_PER_32ND).toFixed(1)),
+      rating: getSafetyLevelFrom32nds(depth32nds),
+      confidence: confs.length ? confs.reduce((s, c) => s + c, 0) / confs.length : null,
+      spread32nds: Math.max(...depths) - Math.min(...depths)
+    };
+  });
+
+  const summary = summaryFromGrooves(grooves);
+  const maxSpread = Math.max(...grooves.map(g => g.spread32nds));
+
+  // ≥2/32″ disagreement between runs → below the 0.6 accept threshold, forcing a retake
+  let confidence = summary.confidence;
+  if (maxSpread >= 2) confidence = Math.min(confidence, 0.5);
+  else if (maxSpread === 1) confidence *= 0.9;
+
+  return {
+    guidance: 'keep_going',
+    acceptFrame: true,
+    depthMm: summary.depthMm,
+    depth32nds: summary.depth32nds,
+    grooves,
+    rating: summary.rating,
+    readyToComplete: true,
+    confidence,
+    notes: `${agreeing.length}/${runs.length} analysis runs agreed on ${grooveCount} groove${grooveCount === 1 ? '' : 's'}; depths matched within ${maxSpread}/32″. Shallowest: ${summary.depth32nds}/32″.`,
+    grooveVisible: true,
+    grooveCount,
+    treadPattern: modalValue(agreeing.map(r => r.treadPattern)),
+    sampleCount: runs.length,
+    agreement32nds: maxSpread
+  };
+}

@@ -78,6 +78,9 @@ export default function ResultsScreen({ result, onScanAgain, onDone }) {
         <p className="text-xs text-gray-500 text-center mt-2">
           AI confidence: {Math.round(result.confidence * 100)}%
           {result.photoCount > 1 && ` · ${result.photoCount} photos analyzed`}
+          {result.sampleCount > 1 && ` · ${result.sampleCount}× analysis`}
+          {result.agreement32nds != null && result.sampleCount > 1 &&
+            ` (runs agreed within ${result.agreement32nds}/32″)`}
           {result.treadPattern === 'directional' && ' · directional/chevron tread detected'}
         </p>
       )}
