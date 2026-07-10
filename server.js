@@ -58,12 +58,16 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
+// Independent model runs per capture; client takes per-groove medians.
+const MAX_SAMPLES = 3;
+
 app.post('/api/analyze-frame', async (req, res) => {
   const {
     imageBase64,
     imagesBase64,
     systemPrompt,
-    userPrompt
+    userPrompt,
+    samples
   } = req.body ?? {};
 
   const apiKey = resolveApiKey();
@@ -108,7 +112,7 @@ app.post('/api/analyze-frame', async (req, res) => {
     body.temperature = 0.2;
   }
 
-  try {
+  async function runAnalysis() {
     const response = await fetch(PROVIDER.url, {
       method: 'POST',
       headers: {
@@ -121,17 +125,49 @@ app.post('/api/analyze-frame', async (req, res) => {
     const payload = await response.json();
 
     if (!response.ok) {
-      const message = payload?.error?.message || `${PROVIDER_NAME} request failed (${response.status})`;
-      return res.status(response.status).json({ error: message });
+      const err = new Error(payload?.error?.message || `${PROVIDER_NAME} request failed (${response.status})`);
+      err.status = response.status;
+      throw err;
     }
 
     const content = payload.choices?.[0]?.message?.content;
     if (!content) {
-      return res.status(502).json({ error: `${PROVIDER_NAME} returned an empty response.` });
+      const err = new Error(`${PROVIDER_NAME} returned an empty response.`);
+      err.status = 502;
+      throw err;
     }
 
-    const analysis = extractJson(content);
-    res.json({ analysis, model: payload.model, usage: payload.usage });
+    return { analysis: extractJson(content), model: payload.model, usage: payload.usage };
+  }
+
+  const sampleCount = Math.min(MAX_SAMPLES, Math.max(1, parseInt(samples, 10) || 1));
+
+  try {
+    const settled = await Promise.allSettled(
+      Array.from({ length: sampleCount }, () => runAnalysis())
+    );
+    const ok = settled.filter(r => r.status === 'fulfilled').map(r => r.value);
+
+    if (ok.length === 0) {
+      const first = settled[0].reason ?? {};
+      return res.status(first.status ?? 500).json({ error: first.message || 'Failed to analyze frame.' });
+    }
+
+    const usage = ok.reduce((sum, r) => {
+      for (const [k, v] of Object.entries(r.usage ?? {})) {
+        if (typeof v === 'number') sum[k] = (sum[k] ?? 0) + v;
+      }
+      return sum;
+    }, {});
+
+    res.json({
+      analysis: ok[0].analysis, // back-compat with single-sample clients
+      analyses: ok.map(r => r.analysis),
+      samplesRequested: sampleCount,
+      samplesCompleted: ok.length,
+      model: ok[0].model,
+      usage
+    });
   } catch (err) {
     res.status(500).json({ error: err.message || 'Failed to analyze frame.' });
   }
