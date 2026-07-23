@@ -7,7 +7,7 @@ const STEPS = [
   { icon: '📊', text: 'Get depth per groove, wear across the tread & a safety rating' }
 ];
 
-export default function HomeScreen({ onCameraGranted }) {
+export default function HomeScreen({ onCameraGranted, onViewHistory }) {
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState(null);
 
@@ -57,7 +57,14 @@ export default function HomeScreen({ onCameraGranted }) {
       <Button variant="primary" onClick={startScan} loading={loading} fullWidth>
         Get Started
       </Button>
-      <p className="text-center text-gray-600 text-xs mt-3">
+      <button
+        type="button"
+        onClick={onViewHistory}
+        className="mt-3 py-2 text-sm text-blue-400 underline self-center"
+      >
+        View scan history
+      </button>
+      <p className="text-center text-gray-600 text-xs mt-1">
         {new Date(__BUILD_TIME__).toLocaleString()}
       </p>
     </div>
