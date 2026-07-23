@@ -97,13 +97,17 @@ export default function ResultsScreen({ result, onScanAgain, onDone }) {
   const rating = shallowest?.rating ?? result.rating;
 
   function handleAccept() {
-    if (wasAdjusted && result.scanLogId) {
-      logScanAdjustment(result.scanLogId, {
-        adjustedGrooves: grooves.map(g => ({ position: g.position, depth32nds: g.depth32nds })),
-        adjustedDepth32nds: depth32nds
-      });
+    // Navigation must never be blocked by the best-effort adjustment logging
+    try {
+      if (wasAdjusted && result.scanLogId) {
+        logScanAdjustment(result.scanLogId, {
+          adjustedGrooves: grooves.map(g => ({ position: g.position, depth32nds: g.depth32nds })),
+          adjustedDepth32nds: depth32nds
+        });
+      }
+    } finally {
+      onDone();
     }
-    onDone();
   }
 
   function adjustDepth(index, delta) {
@@ -244,7 +248,9 @@ export default function ResultsScreen({ result, onScanAgain, onDone }) {
         </div>
       </div>
 
-      <div className="flex gap-3 mt-6">
+      {/* Extra bottom clearance: buttons flush with the screen edge lose their
+          first tap to iOS Safari's toolbar-reveal gesture */}
+      <div className="flex gap-3 mt-6 mb-8">
         <Button variant="secondary" onClick={onScanAgain} className="flex-1">Rescan</Button>
         <Button variant="primary"   onClick={handleAccept} className="flex-1">Accept</Button>
       </div>
