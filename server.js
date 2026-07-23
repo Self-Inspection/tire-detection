@@ -141,17 +141,26 @@ app.post('/api/analyze-frame', async (req, res) => {
   }
 
   const sampleCount = Math.min(MAX_SAMPLES, Math.max(1, parseInt(samples, 10) || 1));
+  const startedAt = Date.now();
+  console.log(`[analyze] start: ${images.length} images, ${sampleCount} samples, model=${PROVIDER.model}`);
 
   try {
     const settled = await Promise.allSettled(
       Array.from({ length: sampleCount }, () => runAnalysis())
     );
     const ok = settled.filter(r => r.status === 'fulfilled').map(r => r.value);
+    const failed = settled.filter(r => r.status === 'rejected');
+    if (failed.length > 0) {
+      console.error(`[analyze] ${failed.length}/${sampleCount} runs failed: ${failed[0].reason?.message}`);
+    }
 
     if (ok.length === 0) {
       const first = settled[0].reason ?? {};
+      console.error(`[analyze] all runs failed after ${Date.now() - startedAt}ms`);
       return res.status(first.status ?? 500).json({ error: first.message || 'Failed to analyze frame.' });
     }
+
+    console.log(`[analyze] done in ${Date.now() - startedAt}ms, ok=${ok.length}/${sampleCount}`);
 
     const usage = ok.reduce((sum, r) => {
       for (const [k, v] of Object.entries(r.usage ?? {})) {

@@ -60,6 +60,7 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
     recordProgress,
     framing,
     lastNotes,
+    attemptFailed,
     attempt,
     maxAttempts,
     triggerRecord,
@@ -187,6 +188,16 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
         <div className="absolute top-16 left-0 right-0 flex justify-center z-20 pointer-events-none">
           <div className="bg-purple-700/90 rounded-full px-4 py-1.5 text-xs text-white">
             Analyzing sweep…
+          </div>
+        </div>
+      )}
+
+      {/* Prominent feedback when a sweep didn't produce a reading */}
+      {attemptFailed && !isRecording && !isAnalyzing && !loading && !activeError && isLandscape && !showSetup && (
+        <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-center px-8 z-30 pointer-events-none">
+          <div className="bg-amber-600/95 rounded-xl px-5 py-4 max-w-sm shadow-xl">
+            <p className="text-white text-sm font-semibold mb-1">No reading from that sweep</p>
+            <p className="text-white/90 text-xs leading-snug">{lastNotes}</p>
           </div>
         </div>
       )}

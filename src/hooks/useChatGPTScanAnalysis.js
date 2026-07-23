@@ -52,6 +52,8 @@ export default function useChatGPTScanAnalysis({
   const [recordProgress, setRecordProgress] = useState(0);
   const [lastNotes, setLastNotes] = useState('Line up at the outer edge of the tread, then tap Record and sweep toward the inner edge.');
   const [attempt, setAttempt] = useState(0);
+  // True when the last sweep ended without a result — drives a prominent retry card
+  const [attemptFailed, setAttemptFailed] = useState(false);
   // Live framing checks while the user lines up the shot (pre-record)
   const [framing, setFraming] = useState({ lightOk: null, treadOk: null });
 
@@ -96,6 +98,7 @@ export default function useChatGPTScanAnalysis({
 
     setIsRecording(true);
     setAnalysisError(null);
+    setAttemptFailed(false);
     setRecordProgress(0);
     setLastNotes('Recording — sweep slowly from the outer edge toward the inner edge…');
     vibrate(60); // start cue
@@ -140,6 +143,7 @@ export default function useChatGPTScanAnalysis({
         const best = Math.round(bestBurstScore(scoredFrames));
         setLastNotes(`Frames too blurry (best ${best}/${MIN_BLUR_SCORE}). Sweep slower and keep ~20 cm distance, then tap Record again.`);
       }
+      setAttemptFailed(true);
       return;
     }
 
@@ -160,6 +164,7 @@ export default function useChatGPTScanAnalysis({
       setGuidance('move_slower');
       const missing = missingZones.map(z => ZONE_LABELS[z].toLowerCase()).join(' and ');
       setLastNotes(`Scan incomplete — the ${missing} part of the sweep wasn't usable. Sweep steadily across the full tread and record again.`);
+      setAttemptFailed(true);
       return;
     }
 
@@ -199,6 +204,7 @@ export default function useChatGPTScanAnalysis({
         setProgress(0);
         setIsAnalyzing(false);
         setLastNotes(`${parsed.notes || 'Adjust framing.'} Tap Record to retry (${apiAttempts.current}/${MAX_ATTEMPTS}).`);
+        setAttemptFailed(true);
         return;
       }
 
@@ -219,6 +225,7 @@ export default function useChatGPTScanAnalysis({
                 ? `Analysis runs disagreed by ${parsed.agreement32nds}/32″ — adjust light/angle and record again.`
                 : `Low confidence (${Math.round(parsed.confidence * 100)}%). Improve lighting and record again.`
           );
+          setAttemptFailed(true);
           return;
         }
         setAnalysisError('Could not detect tread grooves. Try better lighting, closer angle, or clearer groove view.');
@@ -253,6 +260,7 @@ export default function useChatGPTScanAnalysis({
     } catch (err) {
       if (apiAttempts.current < MAX_ATTEMPTS) {
         setLastNotes(`${err.message}. Tap Record to retry.`);
+        setAttemptFailed(true);
       } else {
         setAnalysisError(err.message || 'Analysis failed');
         setGuidance('tilt_phone');
@@ -275,6 +283,7 @@ export default function useChatGPTScanAnalysis({
     recordProgress,
     framing,
     lastNotes,
+    attemptFailed,
     attempt,
     maxAttempts: MAX_ATTEMPTS,
     triggerRecord,
