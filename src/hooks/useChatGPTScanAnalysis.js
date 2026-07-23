@@ -28,6 +28,11 @@ function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// Vibration API is Android-only; silently no-ops on iOS Safari.
+function vibrate(pattern) {
+  try { navigator.vibrate?.(pattern); } catch { /* unsupported */ }
+}
+
 export default function useChatGPTScanAnalysis({
   videoRef,
   isReady,
@@ -58,6 +63,15 @@ export default function useChatGPTScanAnalysis({
     const config = scanConfigRef.current;
     if (!video || !config?.systemPrompt) return;
 
+    // Pre-flight: don't burn a capture on a shot that's too dark to read.
+    const preLighting = measureLighting(video);
+    if (preLighting.brightness < MIN_BRIGHTNESS) {
+      setGuidance('poor_lighting');
+      setLastNotes('Too dark to read the tread. Turn on the flashlight or move to better light, then tap Capture.');
+      vibrate(60);
+      return;
+    }
+
     setIsCapturing(true);
     setAnalysisError(null);
     setLastNotes('Hold steady — capturing photos…');
@@ -74,6 +88,8 @@ export default function useChatGPTScanAnalysis({
 
     const sharpFrames = selectSharpBurstFrames(scoredFrames);
     setIsCapturing(false);
+    // Haptic: photos are in the can — like a camera shutter confirmation.
+    vibrate(100);
 
     if (sharpFrames.length === 0) {
       setGuidance('move_slower');
@@ -172,6 +188,8 @@ export default function useChatGPTScanAnalysis({
         agreement32nds: parsed.agreement32nds ?? null
       });
       setProgress(1);
+      // Success buzz: short-short-long
+      vibrate([100, 60, 250]);
       setIsComplete(true);
     } catch (err) {
       if (apiAttempts.current < MAX_ATTEMPTS) {

@@ -52,6 +52,14 @@ export default function useCamera(videoRef) {
           video.play()
             .then(() => { if (active) setIsReady(true); })
             .catch(() => { if (active) setIsReady(true); }); // some browsers auto-play
+
+          // Auto-enable torch for consistent tread lighting (Android Chrome;
+          // iOS Safari mostly doesn't support it). Fail silently otherwise.
+          if (caps.torch) {
+            track.applyConstraints({ advanced: [{ torch: true }] })
+              .then(() => { if (active) setTorchOn(true); })
+              .catch(() => {});
+          }
         };
       } catch (err) {
         if (!active) return;

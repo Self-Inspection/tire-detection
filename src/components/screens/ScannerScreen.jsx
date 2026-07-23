@@ -5,9 +5,17 @@ import GuidanceOverlay from '../ui/GuidanceOverlay.jsx';
 import ProgressRing from '../ui/ProgressRing.jsx';
 import { SCAN_ROI_STYLE } from '../../utils/scanRoi.js';
 
+const SETUP_STEPS = [
+  { icon: '📱', text: 'Hold the phone upright, 30–40 cm from the tire' },
+  { icon: '🔦', text: 'Flashlight turns on automatically for even lighting' },
+  { icon: '📏', text: 'Line up the tread so grooves run top-to-bottom in the blue box' },
+  { icon: '📸', text: 'Tap Capture — 3 quick photos, phone buzzes when done' }
+];
+
 export default function ScannerScreen({ tireType, scanConfig, onComplete, onCancel }) {
   const videoRef = useRef(null);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [showSetup, setShowSetup] = useState(true);
 
   const { error: cameraError, isReady, hasTorch, torchOn, toggleTorch } = useCamera(videoRef);
 
@@ -83,7 +91,38 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
         </div>
       )}
 
-      <GuidanceOverlay guidance={guidance} />
+      {/* Environment setup — align camera before first capture */}
+      {showSetup && !loading && !activeError && (
+        <div className="absolute inset-0 bg-black/80 flex items-center justify-center p-6 z-40">
+          <div className="bg-dark-card rounded-2xl p-6 w-full max-w-sm">
+            <p className="text-lg font-bold mb-4 text-center">Set up your shot</p>
+            <div className="space-y-3 mb-6">
+              {SETUP_STEPS.map((s, i) => (
+                <div key={i} className="flex items-start gap-3">
+                  <span className="text-xl shrink-0">{s.icon}</span>
+                  <p className="text-sm text-gray-200 leading-snug">{s.text}</p>
+                </div>
+              ))}
+            </div>
+            {!hasTorch && (
+              <p className="text-[11px] text-gray-500 mb-4 text-center">
+                Flashlight isn't available in this browser — make sure the tread is well lit.
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowSetup(false)}
+              style={{ touchAction: 'manipulation' }}
+              className="w-full min-h-[52px] py-4 rounded-xl bg-blue-600 text-white font-semibold text-base
+                active:bg-blue-700 active:scale-[0.98]"
+            >
+              I'm lined up
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!showSetup && <GuidanceOverlay guidance={guidance} />}
 
       {isAnalyzing && !loading && (
         <div className="absolute top-16 left-0 right-0 flex justify-center z-20 pointer-events-none">
@@ -111,18 +150,17 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
         </div>
       )}
 
-      {/* Torch — top left */}
+      {/* Flashlight toggle — top left */}
       {!loading && hasTorch && (
         <div className="absolute top-0 left-0 safe-top p-4 z-50">
           <button
             type="button"
             onClick={toggleTorch}
             style={{ touchAction: 'manipulation' }}
-            className={`backdrop-blur text-white text-sm px-4 py-2 rounded-lg ${
-              torchOn ? 'bg-yellow-500/80 text-black' : 'bg-black/50'
-            }`}
+            className={`backdrop-blur text-sm px-4 py-2 rounded-lg
+              ${torchOn ? 'bg-yellow-500/90 text-black font-semibold' : 'bg-black/50 text-white'}`}
           >
-            {torchOn ? '💡 On' : '💡 Light'}
+            🔦 {torchOn ? 'On' : 'Off'}
           </button>
         </div>
       )}
@@ -142,7 +180,7 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
       )}
 
       {/* Bottom controls — above all overlays, safe-area aware */}
-      {!loading && (
+      {!loading && !showSetup && (
         <div
           className="absolute bottom-0 left-0 right-0 z-50 pointer-events-auto
             bg-gradient-to-t from-black via-black/90 to-transparent
@@ -152,8 +190,8 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
             {isAnalyzing && <ProgressRing progress={progress} />}
             <p className="text-white/60 text-xs text-center pointer-events-none">
               {isAnalyzing
-                ? 'Sending photo for groove analysis…'
-                : 'Align tread in the blue box, then tap Capture'}
+                ? 'Sending photos for groove analysis…'
+                : '30–40 cm away · grooves vertical in the blue box'}
             </p>
             {lastNotes && (
               <p className="text-white/40 text-[10px] text-center line-clamp-3 pointer-events-none">
