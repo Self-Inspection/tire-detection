@@ -247,14 +247,26 @@ app.post('/api/analyze-frame', async (req, res) => {
   }
 
   async function runAnalysis() {
-    const response = await fetch(PROVIDER.url, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(body)
-    });
+    let response;
+    try {
+      response = await fetch(PROVIDER.url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body),
+        // Reasoning models on multi-image input can stall — cap each run
+        signal: AbortSignal.timeout(150_000)
+      });
+    } catch (err) {
+      if (err.name === 'TimeoutError' || err.name === 'AbortError') {
+        const e = new Error(`${PROVIDER_NAME} analysis timed out after 150s`);
+        e.status = 504;
+        throw e;
+      }
+      throw err;
+    }
 
     const payload = await response.json();
 

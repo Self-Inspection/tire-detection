@@ -49,6 +49,7 @@ export default function useChatGPTScanAnalysis({
   const [scanResult, setScanResult] = useState(null);
   const [analysisError, setAnalysisError] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisSeconds, setAnalysisSeconds] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
   const [recordProgress, setRecordProgress] = useState(0);
   const [lastNotes, setLastNotes] = useState('Line up at the outer edge of the tread, then tap Record and sweep toward the inner edge.');
@@ -64,6 +65,18 @@ export default function useChatGPTScanAnalysis({
 
   tireTypeRef.current = tireType;
   scanConfigRef.current = scanConfig;
+
+  // Elapsed timer + creeping progress while the AI works (30–120 s is normal),
+  // so the analysis phase never looks frozen.
+  useEffect(() => {
+    if (!isAnalyzing) return;
+    setAnalysisSeconds(0);
+    const id = setInterval(() => {
+      setAnalysisSeconds(s => s + 1);
+      setProgress(p => (p > 0 && p < 0.8 ? Math.min(0.8, p + 0.004) : p));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [isAnalyzing]);
 
   // Lightweight on-device preview checks (~1 fps): lighting + tread texture.
   useEffect(() => {
@@ -316,6 +329,7 @@ export default function useChatGPTScanAnalysis({
     scanResult,
     analysisError,
     isAnalyzing,
+    analysisSeconds,
     isRecording,
     recordProgress,
     framing,

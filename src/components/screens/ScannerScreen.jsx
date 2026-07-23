@@ -56,6 +56,7 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
     scanResult,
     analysisError,
     isAnalyzing,
+    analysisSeconds,
     isRecording,
     recordProgress,
     framing,
@@ -187,7 +188,7 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
       {isAnalyzing && !loading && (
         <div className="absolute top-16 left-0 right-0 flex justify-center z-20 pointer-events-none">
           <div className="bg-purple-700/90 rounded-full px-4 py-1.5 text-xs text-white">
-            Analyzing sweep…
+            Analyzing sweep… {analysisSeconds}s
           </div>
         </div>
       )}
@@ -286,7 +287,7 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
 
             <p className="text-white/60 text-xs text-center pointer-events-none">
               {isAnalyzing
-                ? 'Sending frames for zone analysis…'
+                ? `AI is measuring the tread — usually 30–90 s (${analysisSeconds}s)`
                 : isRecording
                   ? 'Keep the tread inside the blue box'
                   : allChecksPass
