@@ -38,7 +38,7 @@ function SetupIllustration() {
       <circle cx="129" cy="66" r="2" fill="#333" />
 
       <text x="110" y="16" fill="#3b82f6" fontSize="9" textAnchor="middle" fontFamily="sans-serif">
-        Sweep shoulder → shoulder
+        Sweep outer → inner edge
       </text>
       <text x="165" y="100" fill="#9ca3af" fontSize="8" textAnchor="middle" fontFamily="sans-serif">
         Landscape · ~20 cm · parallel
@@ -99,12 +99,13 @@ export default function SetupScreen({ onBeginScan }) {
         </div>
         <p className="text-xs text-gray-400 mt-2">
           Hold your phone <span className="text-white">sideways (landscape)</span>, about
-          <span className="text-white"> 20 cm</span> from the tread and parallel to the tire.
-          Tap <span className="text-white">Record</span>, then sweep slowly in an arc from one
-          shoulder of the tire to the other for about <span className="text-white">7 seconds</span>.
-          The flashlight turns on automatically and the phone vibrates when the recording is done.
-          You'll get depth for each groove plus wear across the tread — and you can adjust the
-          numbers afterwards if needed.
+          <span className="text-white"> 20 cm (8 in)</span> from the tread and parallel to the tire.
+          Avoid shadows and reflections. Start at the <span className="text-white">outer edge </span>
+          of the tread (away from the car), tap <span className="text-white">Record</span>, then sweep
+          slowly toward the <span className="text-white">inner edge</span> for about
+          <span className="text-white"> 7 seconds</span>. Recording unlocks once all quality checks
+          pass, and the phone vibrates when done. You'll get depth per groove plus outer/center/inner
+          wear — adjustable afterwards if needed.
         </p>
       </div>
 

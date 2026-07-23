@@ -3,7 +3,8 @@ import {
   captureVideoFrame,
   SWEEP_FRAME_COUNT,
   SWEEP_FRAME_INTERVAL_MS,
-  MAX_SWEEP_FRAMES_TO_SEND
+  MAX_SWEEP_FRAMES_TO_SEND,
+  FRAMES_PER_SWEEP_THIRD
 } from '../utils/captureFrame.js';
 import { analyzeTireFrame } from '../utils/analyzeFrame.js';
 import { buildUserPrompt, getTargetDistanceCm } from '../utils/tireAnalysisPrompt.js';
@@ -12,11 +13,10 @@ import {
   aggregateParsedAnalyses,
   isBlockedGuidance
 } from '../utils/parseChatGPTAnalysis.js';
-import { getSafetyLevelFrom32nds, MM_PER_32ND } from '../utils/depthToTread.js';
+import { getSafetyLevelFrom32nds, MM_PER_32ND, ZONE_LABELS } from '../utils/depthToTread.js';
 import {
   measureBlurScore,
   MIN_BLUR_SCORE,
-  selectSharpBurstFrames,
   bestBurstScore,
   measureLighting,
   MIN_BRIGHTNESS,
@@ -50,7 +50,7 @@ export default function useChatGPTScanAnalysis({
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordProgress, setRecordProgress] = useState(0);
-  const [lastNotes, setLastNotes] = useState('Line up the tread, then tap Record and sweep across the tire.');
+  const [lastNotes, setLastNotes] = useState('Line up at the outer edge of the tread, then tap Record and sweep toward the inner edge.');
   const [attempt, setAttempt] = useState(0);
   // Live framing checks while the user lines up the shot (pre-record)
   const [framing, setFraming] = useState({ lightOk: null, treadOk: null });
@@ -97,7 +97,7 @@ export default function useChatGPTScanAnalysis({
     setIsRecording(true);
     setAnalysisError(null);
     setRecordProgress(0);
-    setLastNotes('Recording — sweep slowly from one shoulder to the other…');
+    setLastNotes('Recording — sweep slowly from the outer edge toward the inner edge…');
     vibrate(60); // start cue
 
     const scoredFrames = [];
@@ -117,33 +117,57 @@ export default function useChatGPTScanAnalysis({
     // Haptic: recording done — like the reference app's end-of-scan buzz.
     vibrate([120, 80, 120]);
 
-    const sharpFrames = selectSharpBurstFrames(scoredFrames, { maxCount: MAX_SWEEP_FRAMES_TO_SEND });
-
-    if (sharpFrames.length === 0) {
-      setGuidance('move_slower');
-      const best = Math.round(bestBurstScore(scoredFrames));
-      setLastNotes(`Frames too blurry (best ${best}/${MIN_BLUR_SCORE}). Sweep slower and keep ~20 cm distance, then tap Record again.`);
-      return;
-    }
-
-    const wellLitFrames = sharpFrames.filter(
-      f => f.lighting.brightness >= MIN_BRIGHTNESS && f.lighting.glareFraction <= MAX_GLARE_FRACTION
+    // A frame is usable when it's sharp AND well lit
+    const usable = scoredFrames.filter(f =>
+      f.frame &&
+      f.score >= MIN_BLUR_SCORE &&
+      f.lighting.brightness >= MIN_BRIGHTNESS &&
+      f.lighting.glareFraction <= MAX_GLARE_FRACTION
     );
 
-    if (wellLitFrames.length === 0) {
-      setGuidance('poor_lighting');
-      const darkest = Math.round(Math.min(...sharpFrames.map(f => f.lighting.brightness)));
-      const glariest = Math.max(...sharpFrames.map(f => f.lighting.glareFraction));
-      setLastNotes(
-        glariest > MAX_GLARE_FRACTION
-          ? 'Glare is washing out the tread — angle away from direct light/flash reflection and record again.'
-          : `Too dark (brightness ${darkest}/${MIN_BRIGHTNESS}) — add more light and record again.`
-      );
+    if (usable.length === 0) {
+      const allDark = scoredFrames.every(f => f.lighting.brightness < MIN_BRIGHTNESS);
+      const allGlare = scoredFrames.every(f => f.lighting.glareFraction > MAX_GLARE_FRACTION);
+      if (allDark || allGlare) {
+        setGuidance('poor_lighting');
+        setLastNotes(
+          allGlare
+            ? 'Glare is washing out the tread — angle away from direct light/flash reflection and record again.'
+            : 'Too dark to read the tread — add more light and record again.'
+        );
+      } else {
+        setGuidance('move_slower');
+        const best = Math.round(bestBurstScore(scoredFrames));
+        setLastNotes(`Frames too blurry (best ${best}/${MIN_BLUR_SCORE}). Sweep slower and keep ~20 cm distance, then tap Record again.`);
+      }
       return;
     }
 
-    // Keep sweep order so the model can map first→left shoulder, last→right shoulder
-    const orderedFrames = [...wellLitFrames].sort((a, b) => a.index - b.index);
+    // Coverage: the sweep thirds map to outer / center / inner tread zones —
+    // each third must contribute at least one usable frame or the scan is incomplete.
+    const zoneOfIndex = i =>
+      i < SWEEP_FRAME_COUNT / 3 ? 'outer' : i < (2 * SWEEP_FRAME_COUNT) / 3 ? 'center' : 'inner';
+
+    const thirds = ['outer', 'center', 'inner'].map(zone =>
+      usable
+        .filter(f => zoneOfIndex(f.index) === zone)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, FRAMES_PER_SWEEP_THIRD)
+    );
+
+    const missingZones = ['outer', 'center', 'inner'].filter((_, t) => thirds[t].length === 0);
+    if (missingZones.length > 0) {
+      setGuidance('move_slower');
+      const missing = missingZones.map(z => ZONE_LABELS[z].toLowerCase()).join(' and ');
+      setLastNotes(`Scan incomplete — the ${missing} part of the sweep wasn't usable. Sweep steadily across the full tread and record again.`);
+      return;
+    }
+
+    // Keep sweep order so the model maps first frames → outer shoulder, last → inner
+    const orderedFrames = thirds
+      .flat()
+      .sort((a, b) => a.index - b.index)
+      .slice(0, MAX_SWEEP_FRAMES_TO_SEND);
     const imagesBase64 = orderedFrames.map(f => f.frame);
 
     apiAttempts.current += 1;

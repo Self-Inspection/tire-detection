@@ -20,19 +20,19 @@ export const TIRE_POSITIONS = [
   { id: 'rear-right',  label: 'Rear Right',  short: 'RR' }
 ];
 
-/** Tread-width zones reported from a sweep scan (left shoulder → right shoulder). */
+/** Tread-width zones from a sweep scan. Sweep starts at the OUTER edge (away from the car). */
 export const ZONE_LABELS = {
-  left: 'Left shoulder',
+  outer: 'Outer',
   center: 'Center',
-  right: 'Right shoulder'
+  inner: 'Inner'
 };
 
 export const WEAR_PATTERN_LABELS = {
   even: 'Even wear across the tread',
-  left_worn: 'Left shoulder more worn — possible alignment/camber issue',
-  right_worn: 'Right shoulder more worn — possible alignment/camber issue',
+  outer_worn: 'Outer edge more worn — possible alignment/camber issue',
+  inner_worn: 'Inner edge more worn — possible alignment/camber issue',
   center_worn: 'Center more worn — often over-inflation',
-  edges_worn: 'Both shoulders more worn — often under-inflation',
+  edges_worn: 'Both edges more worn — often under-inflation',
   patchy: 'Patchy/uneven wear — worth a professional inspection',
   unknown: ''
 };

@@ -39,7 +39,7 @@ function parseGrooves(raw) {
   return sorted.map((g, index) => formatGroove(g, index, positions[index]));
 }
 
-const ZONE_ORDER = ['left', 'center', 'right'];
+const ZONE_ORDER = ['outer', 'center', 'inner'];
 const WEAR_PATTERNS = new Set(Object.keys(WEAR_PATTERN_LABELS));
 
 function parseZones(raw) {

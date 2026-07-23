@@ -46,12 +46,13 @@ function clampDepth(v) {
 /** Zone bars: visual depth comparison across the tread width. */
 function ZoneChart({ zones }) {
   return (
-    <div className="flex items-end justify-around gap-3 h-24 px-2">
+    <div className="flex items-end justify-around gap-3 h-32 px-2">
       {zones.map(z => (
         <div key={z.zone} className="flex flex-col items-center gap-1 flex-1">
           <span className={`text-sm font-semibold tabular-nums ${RATING_CLS[z.rating] ?? ''}`}>
-            {z.depth32nds}/32″
+            {z.depthMm} mm
           </span>
+          <span className="text-[10px] text-gray-500 tabular-nums">{z.depth32nds}/32″</span>
           <div className="w-full flex justify-center items-end" style={{ height: 56 }}>
             <div
               className={`w-8 rounded-t ${RATING_BAR_CLS[z.rating] ?? 'bg-gray-500'}`}
@@ -233,8 +234,8 @@ export default function ResultsScreen({ result, onScanAgain, onDone }) {
       </div>
 
       <div className="flex gap-3 mt-6">
-        <Button variant="secondary" onClick={onDone} className="flex-1">Done</Button>
-        <Button variant="primary"   onClick={onScanAgain} className="flex-1">Scan Another Tire</Button>
+        <Button variant="secondary" onClick={onScanAgain} className="flex-1">Rescan</Button>
+        <Button variant="primary"   onClick={onDone} className="flex-1">Accept</Button>
       </div>
     </div>
   );

@@ -1,16 +1,21 @@
 import { useRef, useEffect, useState } from 'react';
 import useCamera from '../../hooks/useCamera.js';
+import useDeviceMotion from '../../hooks/useDeviceMotion.js';
 import useChatGPTScanAnalysis from '../../hooks/useChatGPTScanAnalysis.js';
 import GuidanceOverlay from '../ui/GuidanceOverlay.jsx';
 import ProgressRing from '../ui/ProgressRing.jsx';
 import { SCAN_ROI_STYLE } from '../../utils/scanRoi.js';
 
 const SETUP_STEPS = [
-  { icon: '🔄', text: 'Rotate your phone sideways (landscape)' },
-  { icon: '📏', text: 'Hold ~20 cm from the tread, parallel to the tire' },
-  { icon: '🔦', text: 'Flashlight turns on automatically for even lighting' },
-  { icon: '🎥', text: 'Tap Record, then sweep slowly in an arc from one shoulder of the tire to the other (~7 s). The phone buzzes when done.' }
+  { icon: '📏', text: 'Hold ~20 cm (8 in) from the tread, parallel to the tire' },
+  { icon: '➡️', text: 'Start at the OUTER edge of the tread (away from the car)' },
+  { icon: '🎥', text: 'Tap Record, then sweep slowly toward the inner edge (~7 s). The phone buzzes when done.' },
+  { icon: '💡', text: 'Avoid shadows and reflections — the flashlight turns on automatically' }
 ];
+
+/** Sweep pace thresholds (deg/s rotation) for live recording feedback. */
+const SWEEP_TOO_FAST = 80;
+const SWEEP_STOPPED = 3;
 
 function useIsLandscape() {
   const [isLandscape, setIsLandscape] = useState(
@@ -42,6 +47,7 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
   const isLandscape = useIsLandscape();
 
   const { error: cameraError, isReady, hasTorch, torchOn, toggleTorch } = useCamera(videoRef);
+  const { requestPermission: requestMotion, parallelOk, steadyOk, sweepSpeed } = useDeviceMotion();
 
   const {
     guidance,
@@ -66,6 +72,14 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
   });
 
   const activeError = cameraError || analysisError;
+
+  // Record is enabled only when every available check passes.
+  // Motion checks are null when sensors are unavailable/denied — don't block on those.
+  const allChecksPass =
+    framing.lightOk === true &&
+    framing.treadOk === true &&
+    parallelOk !== false &&
+    steadyOk !== false;
 
   useEffect(() => {
     if (isComplete && scanResult) onComplete(scanResult);
@@ -152,12 +166,16 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
             )}
             <button
               type="button"
-              onClick={() => setShowSetup(false)}
+              onClick={() => {
+                // iOS motion sensors need a permission request from a user gesture
+                requestMotion();
+                setShowSetup(false);
+              }}
               style={{ touchAction: 'manipulation' }}
               className="w-full min-h-[48px] py-3 rounded-xl bg-blue-600 text-white font-semibold text-base
                 active:bg-blue-700 active:scale-[0.98]"
             >
-              I'm lined up
+              Start Scan
             </button>
           </div>
         </div>
@@ -175,9 +193,16 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
 
       {isRecording && !loading && (
         <div className="absolute top-16 left-0 right-0 flex flex-col items-center gap-2 z-20 pointer-events-none px-8">
-          <div className="bg-red-600/90 rounded-full px-4 py-1.5 text-xs text-white flex items-center gap-2">
+          <div className={`rounded-full px-4 py-1.5 text-xs text-white flex items-center gap-2
+            ${sweepSpeed != null && sweepSpeed > SWEEP_TOO_FAST ? 'bg-orange-600/95' : 'bg-red-600/90'}`}>
             <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
-            Recording — sweep slowly across the tread
+            {sweepSpeed == null
+              ? 'Recording — sweep slowly toward the inner edge'
+              : sweepSpeed > SWEEP_TOO_FAST
+                ? 'Move slower'
+                : sweepSpeed < SWEEP_STOPPED
+                  ? 'Keep moving — sweep toward the inner edge'
+                  : 'Good pace — keep sweeping'}
           </div>
           <div className="w-full max-w-sm h-1.5 bg-white/20 rounded-full overflow-hidden">
             <div
@@ -185,6 +210,7 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
               style={{ width: `${Math.round(recordProgress * 100)}%` }}
             />
           </div>
+          <p className="text-white/60 text-[10px]">{Math.round(recordProgress * 100)}% · outer → inner</p>
         </div>
       )}
 
@@ -237,11 +263,13 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
           <div className="flex flex-col items-center gap-2 max-w-md mx-auto">
             {isAnalyzing && <ProgressRing progress={progress} />}
 
-            {/* Live framing checks while lining up */}
+            {/* Live quality checks while lining up — all must pass to enable Record */}
             {!isRecording && !isAnalyzing && (
-              <div className="flex gap-2 pointer-events-none">
-                <FramingChip ok={framing.lightOk} okText="Light OK" badText="Too dark / glare" />
-                <FramingChip ok={framing.treadOk} okText="Tread visible" badText="Point at tread" />
+              <div className="flex flex-wrap justify-center gap-1.5 pointer-events-none">
+                <FramingChip ok={framing.treadOk} okText="Tread found" badText="Find the tire tread" />
+                <FramingChip ok={framing.lightOk} okText="Lighting" badText="Improve lighting" />
+                <FramingChip ok={parallelOk} okText="Parallel" badText="Rotate phone" />
+                <FramingChip ok={steadyOk} okText="Steady" badText="Hold steady" />
               </div>
             )}
 
@@ -250,7 +278,9 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
                 ? 'Sending frames for zone analysis…'
                 : isRecording
                   ? 'Keep the tread inside the blue box'
-                  : `${positionLabel ? positionLabel + ' · ' : ''}~20 cm away · parallel to the tire`}
+                  : allChecksPass
+                    ? '✓ Ready to scan'
+                    : `${positionLabel ? positionLabel + ' · ' : ''}~20 cm away · parallel to the tire`}
             </p>
             {lastNotes && !isRecording && (
               <p className="text-white/40 text-[10px] text-center line-clamp-2 pointer-events-none">
@@ -261,11 +291,13 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
               <button
                 type="button"
                 onClick={triggerRecord}
-                disabled={!canRecord}
+                disabled={!canRecord || !allChecksPass}
                 style={{ touchAction: 'manipulation' }}
-                className="flex items-center justify-center gap-2 px-10 min-h-[52px] py-3 rounded-full bg-red-600 text-white font-semibold text-base
-                  shadow-lg shadow-red-900/40
-                  disabled:opacity-40 disabled:cursor-not-allowed active:bg-red-700 active:scale-[0.98]"
+                className={`flex items-center justify-center gap-2 px-10 min-h-[52px] py-3 rounded-full text-white font-semibold text-base
+                  shadow-lg disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98]
+                  ${allChecksPass
+                    ? 'bg-green-600 shadow-green-900/40 active:bg-green-700'
+                    : 'bg-red-600 shadow-red-900/40 active:bg-red-700'}`}
               >
                 <span className="w-3 h-3 rounded-full bg-white" />
                 Record
