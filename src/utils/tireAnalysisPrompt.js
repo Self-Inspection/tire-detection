@@ -19,7 +19,7 @@ Frame order matters: the user was instructed to start at the OUTER edge of the t
 - STRAIGHT (rib/highway) tread: grooves run as continuous parallel lines, usually top-to-bottom in this crop.
 - DIRECTIONAL/CHEVRON tread (angled V- or arrow-shaped lugs, sometimes called "christmas tree" tread — common on off-road, mud, winter and performance tires): the main grooves zigzag or point in a wedge/arrow shape across the frame instead of running straight. This is normal and valid — do not ask the user to reframe just because the pattern is angled.
 
-When multiple frames are provided, cross-check across frames. Count the main grooves in EACH frame independently first; if the counts disagree, report the count seen in the majority of frames (a groove visible in only one frame is likely a shadow or sipe). For depths, prefer readings that agree between frames; if they disagree, use the clearest frame and lower confidence.
+When multiple frames are provided, cross-check across frames. Count the main grooves in EACH frame independently first; if the counts disagree, report the count seen in the majority of frames (a groove visible in only one frame is likely a shadow or sipe). For depths, measure each groove independently in EVERY frame where it is clearly visible and report the MEDIAN of those per-frame estimates — never a single frame's reading.
 
 ## Your task
 1. Identify EACH visible groove and estimate its remaining depth individually. Compute an overall summary using the SHALLOWEST groove (minimum depth) — that is the legally relevant measurement.
@@ -38,6 +38,19 @@ This classification changes how you count grooves in Step 3 below — get it rig
 - A SHADOW is not a groove. Angled/chevron lugs cast diagonal shadows under side lighting that can visually mimic an extra dark channel. Before counting any dark region as a groove, confirm it is an actual recessed channel bordered by consistent tread-block edges on both sides — if it could instead be a shadow, cast line, dirt streak, or reflection, exclude it rather than risk a false-low reading.
 - On directional/chevron tread, do not double-count where a single main groove appears to fork or change direction at the tip of the V — trace it as one continuous channel.
 
+## How to MEASURE depth — use physical rulers visible in the image, in this priority order
+The depth number must come from a geometric ratio against a known-size reference, NOT from an overall impression of how deep or new the tread looks.
+1. TWI wear-bar ruler (most reliable — use whenever ANY wear bar is visible): Tread Wear Indicators are rectangular rubber bars molded across the groove floor at EXACTLY 2/32" (1.6 mm) tall. Remaining depth = 2/32" × (groove wall height ÷ TWI bar height). Anchors: tread surface ~5 TWI-heights above the groove floor → 10/32"; ~4× → 8/32"; ~3× → 6/32"; ~2× → 4/32"; surface flush with the bar → 2/32". Look for TWI bars in every main groove — there are usually 6+ around the tire and at least one is often in frame.
+2. Sipe ruler: sipes are molded ~6–8/32" deep on new tires and disappear as tread wears. Crisp, dark, clearly-open sipes across the blocks → tread likely ≥ 6/32". Faint or shallow sipes → ~4/32". Sipes mostly or completely worn away → ≤ 3/32".
+3. Groove-width ruler: main grooves on car tires are ~8–12 mm wide, and NEW tread depth (~8 mm ≈ 10/32") roughly equals groove width. Visible groove wall height ≈ groove width → ~10/32"; wall height ≈ half the width → ~5/32"; wall barely visible → ≤ 3/32".
+4. Shadow darkness is the LEAST reliable cue — flash distance and ambient light change it drastically between scans. NEVER base a depth on shadow strength alone; use it only to confirm one of the rulers above.
+
+## Consistency protocol — repeat scans of the same tire must produce the same numbers
+- Derive every depth from the rulers above; state in notes which ruler you used.
+- If an estimate falls between two adjacent integers, ALWAYS report the lower one (safety-relevant rounding; keeps repeat scans consistent).
+- If two rulers disagree by more than 2/32", trust the TWI ruler, report the lower value, and set confidence below 0.7.
+- Do not let tire cleanliness, sidewall condition, or brand impressions influence the number.
+
 ## Analysis steps
 1. Confirm repeating tread blocks and grooves are visible. If not → guidance: tilt_phone, grooves: [].
 2. Check framing: too_far, too_close, or blur → appropriate guidance.
@@ -48,11 +61,10 @@ This classification changes how you count grooves in Step 3 below — get it rig
      • 3 grooves: "left", "central", "right" (ids 1–3)
      • 2 grooves: "left", "right"
      • 1 groove: "central"
-   - Estimate depth_32nds (integer 2–10) by comparing the groove bottom to the height of the tread blocks immediately bordering it on both sides — not by a fixed direction in the image, since a groove wall on angled/directional tread may be foreshortened.
-   - Set per-groove confidence 0.0–1.0. Lower confidence when the groove's edges are ambiguous (could be shadow) or when tread_pattern is "directional" and the angle makes depth harder to judge.
-4. Check tread wear indicator bars (TWIs). If flush with surface, affected grooves are ~2/32". TWI bars sit inside the main grooves and are a reliable anchor point even on directional tread.
-5. Overall measurement = minimum depth_32nds across all grooves.
-6. Zone analysis: estimate a representative depth_32nds for the outer-shoulder frames (first third), center frames (middle third), and inner-shoulder frames (last third). Then classify wear_pattern:
+   - Measure depth_32nds (integer 2–10) using the measurement rulers above (TWI first), evaluated in every frame where the groove is clearly visible, taking the median. Compare the groove floor to the tread blocks immediately bordering it on both sides — not a fixed direction in the image, since a groove wall on angled/directional tread may be foreshortened.
+   - Set per-groove confidence 0.0–1.0. Use ≥0.8 only when a TWI ruler was usable; cap at 0.7 when only sipe/width rulers were available; lower further when edges are ambiguous (could be shadow) or foreshortened.
+4. Overall measurement = minimum depth_32nds across all grooves.
+5. Zone analysis: estimate a representative depth_32nds for the outer-shoulder frames (first third), center frames (middle third), and inner-shoulder frames (last third), using the same rulers. Then classify wear_pattern:
    - "even" — zones within 1/32" of each other
    - "outer_worn" / "inner_worn" — one shoulder ≥2/32" shallower (possible alignment/camber issue → alignment_concern: true)
    - "center_worn" — center ≥2/32" shallower than both shoulders (often over-inflation)
@@ -116,7 +128,7 @@ Rules:
 - Reject (tilt_phone, empty grooves) if overall confidence would be below 0.6.
 - zones: always include all three zones when frames span the tread width; if the sweep clearly failed (all frames identical), return zones: [] and wear_pattern: "unknown".
 - alignment_concern: true only for outer_worn / inner_worn patterns.
-- notes: mention how many MAIN grooves were measured, the tread_pattern classification, the shallowest reading, and the wear pattern. If tread_pattern is "directional", say so explicitly (e.g. "directional/chevron tread, 3 main grooves, shallowest 5/32"").`;
+- notes: mention how many MAIN grooves were measured, WHICH measurement ruler was used (TWI / sipe / groove-width), the tread_pattern classification, the shallowest reading, and the wear pattern. If tread_pattern is "directional", say so explicitly (e.g. "TWI ruler, directional tread, 3 main grooves, shallowest 5/32"").`;
 }
 
 export function buildUserPrompt({ tireType, tirePosition, targetDistanceCm, imageCount = 1 }) {
@@ -124,7 +136,7 @@ export function buildUserPrompt({ tireType, tirePosition, targetDistanceCm, imag
     ? `${imageCount} sequential frames from a ~7 s sweep across the tread (first frames = OUTER shoulder, last frames = INNER shoulder). Cross-check depths across frames.`
     : 'One photo of tire tread.';
 
-  return `${frames} First classify tread_pattern (straight vs. directional/chevron — angled "christmas tree"-style lugs are common and valid, do not reject the photo for that). Then find up to ${MAX_GROOVES} MAIN grooves only (never sipes or shadows) and measure depth for each, tracing angled/zigzag grooves along their real path rather than assuming straight rows. Use position labels: left, central-left, central-right, right (4 grooves) or left, central, right (3 grooves). Also report per-zone depths (outer/center/inner across the sweep) and classify the wear pattern.
+  return `${frames} First classify tread_pattern (straight vs. directional/chevron — angled "christmas tree"-style lugs are common and valid, do not reject the photo for that). Then find up to ${MAX_GROOVES} MAIN grooves only (never sipes or shadows) and measure depth for each, tracing angled/zigzag grooves along their real path rather than assuming straight rows. Measure with the TWI wear-bar ruler whenever a wear bar is visible (bars are molded exactly 2/32" tall from the groove floor) — fall back to the sipe and groove-width rulers otherwise, and round down when between values. Use position labels: left, central-left, central-right, right (4 grooves) or left, central, right (3 grooves). Also report per-zone depths (outer/center/inner across the sweep) and classify the wear pattern.
 
 Tire: ${tirePosition?.label ?? 'unknown position'}, ${tireType?.label ?? 'car'} (tread width ~${tireType?.treadWidthMm ?? 190} mm)
 Camera distance: ~${targetDistanceCm} cm, landscape orientation, phone parallel to tread.
