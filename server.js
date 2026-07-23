@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import pg from 'pg';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -8,6 +9,57 @@ const PORT = parseInt(process.env.PORT, 10) || 3001;
 const isProd = process.env.NODE_ENV === 'production';
 
 app.use(express.json({ limit: '20mb' }));
+
+// ---------- Scan history database (Railway Postgres) ----------
+// Missing DATABASE_URL (e.g. local dev without a DB) disables recording;
+// scanning itself never depends on the database.
+const pool = process.env.DATABASE_URL
+  ? new pg.Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.DATABASE_URL.includes('railway.internal')
+        ? false
+        : { rejectUnauthorized: false }
+    })
+  : null;
+
+async function initDb() {
+  if (!pool) {
+    console.log('[db] DATABASE_URL not set — scan recording disabled');
+    return;
+  }
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS scans (
+        id SERIAL PRIMARY KEY,
+        client_id TEXT UNIQUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        status TEXT NOT NULL,
+        tire_position TEXT,
+        depth_32nds INT,
+        depth_mm REAL,
+        rating TEXT,
+        confidence REAL,
+        grooves JSONB,
+        zones JSONB,
+        wear_pattern TEXT,
+        alignment_concern BOOLEAN,
+        tread_pattern TEXT,
+        photo_count INT,
+        sample_count INT,
+        agreement_32nds INT,
+        notes TEXT,
+        reject_reason TEXT,
+        adjusted_grooves JSONB,
+        adjusted_depth_32nds INT,
+        user_agent TEXT
+      )
+    `);
+    console.log('[db] scans table ready');
+  } catch (err) {
+    console.error('[db] init failed:', err.message);
+  }
+}
+initDb();
 
 // Vision provider selection. Both speak the OpenAI Chat Completions format —
 // Gemini via Google's OpenAI-compatible endpoint — so the request body is shared.
@@ -54,8 +106,90 @@ app.get('/api/health', (_req, res) => {
     ok: true,
     provider: PROVIDER_NAME,
     hasServerKey: Boolean(resolveApiKey()),
-    model: PROVIDER.model
+    model: PROVIDER.model,
+    hasDatabase: Boolean(pool)
   });
+});
+
+// ---------- Scan records ----------
+
+app.post('/api/scans', async (req, res) => {
+  if (!pool) return res.status(200).json({ recorded: false });
+  const b = req.body ?? {};
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO scans (
+        client_id, status, tire_position, depth_32nds, depth_mm, rating,
+        confidence, grooves, zones, wear_pattern, alignment_concern,
+        tread_pattern, photo_count, sample_count, agreement_32nds,
+        notes, reject_reason, user_agent
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+      ON CONFLICT (client_id) DO NOTHING
+      RETURNING id`,
+      [
+        b.clientId ?? null,
+        b.status === 'rejected' ? 'rejected' : 'completed',
+        b.tirePosition ?? null,
+        b.depth32nds ?? null,
+        b.depthMm ?? null,
+        b.rating ?? null,
+        b.confidence ?? null,
+        b.grooves ? JSON.stringify(b.grooves) : null,
+        b.zones ? JSON.stringify(b.zones) : null,
+        b.wearPattern ?? null,
+        typeof b.alignmentConcern === 'boolean' ? b.alignmentConcern : null,
+        b.treadPattern ?? null,
+        b.photoCount ?? null,
+        b.sampleCount ?? null,
+        b.agreement32nds ?? null,
+        b.notes ?? null,
+        b.rejectReason ?? null,
+        req.headers['user-agent'] ?? null
+      ]
+    );
+    res.json({ recorded: true, id: rows[0]?.id ?? null });
+  } catch (err) {
+    console.error('[db] insert failed:', err.message);
+    res.status(500).json({ error: 'Failed to record scan.' });
+  }
+});
+
+// Manual corrections from the results screen, keyed by the client-generated scan id
+app.patch('/api/scans/:clientId', async (req, res) => {
+  if (!pool) return res.status(200).json({ recorded: false });
+  const { adjustedGrooves, adjustedDepth32nds } = req.body ?? {};
+  try {
+    await pool.query(
+      `UPDATE scans SET
+        adjusted_grooves = $2,
+        adjusted_depth_32nds = $3
+      WHERE client_id = $1`,
+      [
+        req.params.clientId,
+        adjustedGrooves ? JSON.stringify(adjustedGrooves) : null,
+        adjustedDepth32nds ?? null
+      ]
+    );
+    res.json({ recorded: true });
+  } catch (err) {
+    console.error('[db] update failed:', err.message);
+    res.status(500).json({ error: 'Failed to update scan.' });
+  }
+});
+
+app.get('/api/scans', async (req, res) => {
+  if (!pool) return res.json({ scans: [], recording: false });
+  const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM scans ORDER BY created_at DESC LIMIT $1',
+      [limit]
+    );
+    res.json({ scans: rows, recording: true });
+  } catch (err) {
+    console.error('[db] select failed:', err.message);
+    res.status(500).json({ error: 'Failed to load scans.' });
+  }
 });
 
 // Independent model runs per capture; client takes per-groove medians.

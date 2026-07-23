@@ -14,6 +14,7 @@ import {
   isBlockedGuidance
 } from '../utils/parseChatGPTAnalysis.js';
 import { getSafetyLevelFrom32nds, MM_PER_32ND, ZONE_LABELS } from '../utils/depthToTread.js';
+import { logScan, newScanLogId } from '../utils/scanLog.js';
 import {
   measureBlurScore,
   MIN_BLUR_SCORE,
@@ -80,6 +81,15 @@ export default function useChatGPTScanAnalysis({
     return () => clearInterval(id);
   }, [isReady, isRecording, isAnalyzing, isComplete, videoRef]);
 
+  const logRejection = useCallback((reason) => {
+    logScan({
+      clientId: newScanLogId(),
+      status: 'rejected',
+      tirePosition: scanConfigRef.current?.tirePosition?.id ?? null,
+      rejectReason: reason
+    });
+  }, []);
+
   const triggerRecord = useCallback(async () => {
     if (!isReady || isAnalyzing || isRecording || isComplete) return;
 
@@ -131,18 +141,19 @@ export default function useChatGPTScanAnalysis({
     if (usable.length === 0) {
       const allDark = scoredFrames.every(f => f.lighting.brightness < MIN_BRIGHTNESS);
       const allGlare = scoredFrames.every(f => f.lighting.glareFraction > MAX_GLARE_FRACTION);
+      let msg;
       if (allDark || allGlare) {
         setGuidance('poor_lighting');
-        setLastNotes(
-          allGlare
-            ? 'Glare is washing out the tread — angle away from direct light/flash reflection and record again.'
-            : 'Too dark to read the tread — add more light and record again.'
-        );
+        msg = allGlare
+          ? 'Glare is washing out the tread — angle away from direct light/flash reflection and record again.'
+          : 'Too dark to read the tread — add more light and record again.';
       } else {
         setGuidance('move_slower');
         const best = Math.round(bestBurstScore(scoredFrames));
-        setLastNotes(`Frames too blurry (best ${best}/${MIN_BLUR_SCORE}). Sweep slower and keep ~20 cm distance, then tap Record again.`);
+        msg = `Frames too blurry (best ${best}/${MIN_BLUR_SCORE}). Sweep slower and keep ~20 cm distance, then tap Record again.`;
       }
+      setLastNotes(msg);
+      logRejection(msg);
       setAttemptFailed(true);
       return;
     }
@@ -163,7 +174,9 @@ export default function useChatGPTScanAnalysis({
     if (missingZones.length > 0) {
       setGuidance('move_slower');
       const missing = missingZones.map(z => ZONE_LABELS[z].toLowerCase()).join(' and ');
-      setLastNotes(`Scan incomplete — the ${missing} part of the sweep wasn't usable. Sweep steadily across the full tread and record again.`);
+      const msg = `Scan incomplete — the ${missing} part of the sweep wasn't usable. Sweep steadily across the full tread and record again.`;
+      setLastNotes(msg);
+      logRejection(msg);
       setAttemptFailed(true);
       return;
     }
@@ -204,27 +217,29 @@ export default function useChatGPTScanAnalysis({
         setProgress(0);
         setIsAnalyzing(false);
         setLastNotes(`${parsed.notes || 'Adjust framing.'} Tap Record to retry (${apiAttempts.current}/${MAX_ATTEMPTS}).`);
+        logRejection(`AI rejected framing (${parsed.guidance}): ${parsed.notes || 'no notes'}`);
         setAttemptFailed(true);
         return;
       }
 
       if (blocked) {
         setAnalysisError(parsed.notes || 'Could not read tread. Adjust angle and try again.');
+        logRejection(`AI rejected framing, attempts exhausted (${parsed.guidance}): ${parsed.notes || 'no notes'}`);
         setIsAnalyzing(false);
         return;
       }
 
       if (parsed.grooves.length === 0 || parsed.confidence < 0.6) {
+        const reason = parsed.grooves.length === 0
+          ? `No grooves detected. Keep the tread inside the blue box during the sweep and tap Record (${apiAttempts.current}/${MAX_ATTEMPTS}).`
+          : parsed.agreement32nds >= 2
+            ? `Analysis runs disagreed by ${parsed.agreement32nds}/32″ — adjust light/angle and record again.`
+            : `Low confidence (${Math.round(parsed.confidence * 100)}%). Improve lighting and record again.`;
+        logRejection(reason);
         if (apiAttempts.current < MAX_ATTEMPTS) {
           setProgress(0);
           setIsAnalyzing(false);
-          setLastNotes(
-            parsed.grooves.length === 0
-              ? `No grooves detected. Keep the tread inside the blue box during the sweep and tap Record (${apiAttempts.current}/${MAX_ATTEMPTS}).`
-              : parsed.agreement32nds >= 2
-                ? `Analysis runs disagreed by ${parsed.agreement32nds}/32″ — adjust light/angle and record again.`
-                : `Low confidence (${Math.round(parsed.confidence * 100)}%). Improve lighting and record again.`
-          );
+          setLastNotes(reason);
           setAttemptFailed(true);
           return;
         }
@@ -235,8 +250,29 @@ export default function useChatGPTScanAnalysis({
 
       const depth32nds = parsed.depth32nds;
       const depthMm = parsed.depthMm ?? parseFloat((depth32nds * MM_PER_32ND).toFixed(1));
+      const scanLogId = newScanLogId();
+
+      logScan({
+        clientId: scanLogId,
+        status: 'completed',
+        tirePosition: config.tirePosition?.id ?? null,
+        depth32nds,
+        depthMm,
+        rating: getSafetyLevelFrom32nds(depth32nds),
+        confidence: parsed.confidence,
+        grooves: parsed.grooves,
+        zones: parsed.zones,
+        wearPattern: parsed.wearPattern,
+        alignmentConcern: parsed.alignmentConcern,
+        treadPattern: parsed.treadPattern,
+        photoCount: imagesBase64.length,
+        sampleCount: parsed.sampleCount ?? 1,
+        agreement32nds: parsed.agreement32nds ?? null,
+        notes: parsed.notes
+      });
 
       setScanResult({
+        scanLogId,
         depthMm,
         depth32nds,
         rating: getSafetyLevelFrom32nds(depth32nds),
@@ -258,6 +294,7 @@ export default function useChatGPTScanAnalysis({
       vibrate([100, 60, 250]);
       setIsComplete(true);
     } catch (err) {
+      logRejection(`Analysis request failed: ${err.message}`);
       if (apiAttempts.current < MAX_ATTEMPTS) {
         setLastNotes(`${err.message}. Tap Record to retry.`);
         setAttemptFailed(true);
@@ -268,7 +305,7 @@ export default function useChatGPTScanAnalysis({
     } finally {
       setIsAnalyzing(false);
     }
-  }, [isReady, isAnalyzing, isRecording, isComplete, videoRef]);
+  }, [isReady, isAnalyzing, isRecording, isComplete, videoRef, logRejection]);
 
   const canRecord = isReady && !isAnalyzing && !isRecording && !isComplete && attempt < MAX_ATTEMPTS;
 

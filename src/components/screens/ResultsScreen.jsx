@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import Badge from '../ui/Badge.jsx';
 import Button from '../ui/Button.jsx';
+import { logScanAdjustment } from '../../utils/scanLog.js';
 import {
   MAX_GROOVES,
   MM_PER_32ND,
@@ -94,6 +95,16 @@ export default function ResultsScreen({ result, onScanAgain, onDone }) {
   const depth32nds = shallowest?.depth32nds ?? result.depth32nds;
   const depthMm = shallowest?.depthMm ?? result.depthMm;
   const rating = shallowest?.rating ?? result.rating;
+
+  function handleAccept() {
+    if (wasAdjusted && result.scanLogId) {
+      logScanAdjustment(result.scanLogId, {
+        adjustedGrooves: grooves.map(g => ({ position: g.position, depth32nds: g.depth32nds })),
+        adjustedDepth32nds: depth32nds
+      });
+    }
+    onDone();
+  }
 
   function adjustDepth(index, delta) {
     setEditedDepths(prev => {
@@ -235,7 +246,7 @@ export default function ResultsScreen({ result, onScanAgain, onDone }) {
 
       <div className="flex gap-3 mt-6">
         <Button variant="secondary" onClick={onScanAgain} className="flex-1">Rescan</Button>
-        <Button variant="primary"   onClick={onDone} className="flex-1">Accept</Button>
+        <Button variant="primary"   onClick={handleAccept} className="flex-1">Accept</Button>
       </div>
     </div>
   );
