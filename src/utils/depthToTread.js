@@ -13,6 +13,30 @@ export const TIRE_TYPES = [
 export const DEFAULT_TIRE_TYPE = TIRE_TYPES[0];
 export const MAX_GROOVES = 4;
 
+export const TIRE_POSITIONS = [
+  { id: 'front-left',  label: 'Front Left',  short: 'FL' },
+  { id: 'front-right', label: 'Front Right', short: 'FR' },
+  { id: 'rear-left',   label: 'Rear Left',   short: 'RL' },
+  { id: 'rear-right',  label: 'Rear Right',  short: 'RR' }
+];
+
+/** Tread-width zones reported from a sweep scan (left shoulder → right shoulder). */
+export const ZONE_LABELS = {
+  left: 'Left shoulder',
+  center: 'Center',
+  right: 'Right shoulder'
+};
+
+export const WEAR_PATTERN_LABELS = {
+  even: 'Even wear across the tread',
+  left_worn: 'Left shoulder more worn — possible alignment/camber issue',
+  right_worn: 'Right shoulder more worn — possible alignment/camber issue',
+  center_worn: 'Center more worn — often over-inflation',
+  edges_worn: 'Both shoulders more worn — often under-inflation',
+  patchy: 'Patchy/uneven wear — worth a professional inspection',
+  unknown: ''
+};
+
 /** Display labels for groove positions (left → right across tread). */
 export const GROOVE_POSITION_LABELS = {
   left: 'Left',

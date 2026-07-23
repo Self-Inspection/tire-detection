@@ -34,6 +34,13 @@ export function captureVideoFrame(videoElement, {
 export const BURST_COUNT = 3;
 export const BURST_INTERVAL_MS = 200;
 
+/** Guided sweep recording: ~7 s arc from one tire shoulder to the other. */
+export const SWEEP_DURATION_MS = 7000;
+export const SWEEP_FRAME_COUNT = 8;
+export const SWEEP_FRAME_INTERVAL_MS = Math.round(SWEEP_DURATION_MS / SWEEP_FRAME_COUNT);
+/** Cap on frames sent to the model — keeps token cost bounded. */
+export const MAX_SWEEP_FRAMES_TO_SEND = 6;
+
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }

@@ -1,8 +1,9 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import {
   captureVideoFrame,
-  BURST_COUNT,
-  BURST_INTERVAL_MS
+  SWEEP_FRAME_COUNT,
+  SWEEP_FRAME_INTERVAL_MS,
+  MAX_SWEEP_FRAMES_TO_SEND
 } from '../utils/captureFrame.js';
 import { analyzeTireFrame } from '../utils/analyzeFrame.js';
 import { buildUserPrompt, getTargetDistanceCm } from '../utils/tireAnalysisPrompt.js';
@@ -23,6 +24,8 @@ import {
 } from '../utils/imageQuality.js';
 
 const MAX_ATTEMPTS = 3;
+/** Preview texture threshold — lower than capture bar; just "is tread detail visible". */
+const MIN_PREVIEW_TEXTURE = 45;
 
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -45,9 +48,12 @@ export default function useChatGPTScanAnalysis({
   const [scanResult, setScanResult] = useState(null);
   const [analysisError, setAnalysisError] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [isCapturing, setIsCapturing] = useState(false);
-  const [lastNotes, setLastNotes] = useState('Align tread in the blue box, then tap Capture.');
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordProgress, setRecordProgress] = useState(0);
+  const [lastNotes, setLastNotes] = useState('Line up the tread, then tap Record and sweep across the tire.');
   const [attempt, setAttempt] = useState(0);
+  // Live framing checks while the user lines up the shot (pre-record)
+  const [framing, setFraming] = useState({ lightOk: null, treadOk: null });
 
   const apiAttempts = useRef(0);
   const tireTypeRef = useRef(tireType);
@@ -56,45 +62,67 @@ export default function useChatGPTScanAnalysis({
   tireTypeRef.current = tireType;
   scanConfigRef.current = scanConfig;
 
-  const triggerCapture = useCallback(async () => {
-    if (!isReady || isAnalyzing || isCapturing || isComplete) return;
+  // Lightweight on-device preview checks (~1 fps): lighting + tread texture.
+  useEffect(() => {
+    if (!isReady || isRecording || isAnalyzing || isComplete) return;
+    const id = setInterval(() => {
+      const video = videoRef.current;
+      if (!video) return;
+      const { brightness, glareFraction } = measureLighting(video);
+      const texture = measureBlurScore(video);
+      setFraming({
+        lightOk: brightness >= MIN_BRIGHTNESS && glareFraction <= MAX_GLARE_FRACTION,
+        treadOk: texture >= MIN_PREVIEW_TEXTURE
+      });
+    }, 900);
+    return () => clearInterval(id);
+  }, [isReady, isRecording, isAnalyzing, isComplete, videoRef]);
+
+  const triggerRecord = useCallback(async () => {
+    if (!isReady || isAnalyzing || isRecording || isComplete) return;
 
     const video = videoRef.current;
     const config = scanConfigRef.current;
     if (!video || !config?.systemPrompt) return;
 
-    // Pre-flight: don't burn a capture on a shot that's too dark to read.
+    // Pre-flight: don't burn a recording on a shot that's too dark to read.
     const preLighting = measureLighting(video);
     if (preLighting.brightness < MIN_BRIGHTNESS) {
       setGuidance('poor_lighting');
-      setLastNotes('Too dark to read the tread. Turn on the flashlight or move to better light, then tap Capture.');
+      setLastNotes('Too dark to read the tread. Turn on the flashlight or move to better light, then tap Record.');
       vibrate(60);
       return;
     }
 
-    setIsCapturing(true);
+    setIsRecording(true);
     setAnalysisError(null);
-    setLastNotes('Hold steady — capturing photos…');
+    setRecordProgress(0);
+    setLastNotes('Recording — sweep slowly from one shoulder to the other…');
+    vibrate(60); // start cue
 
     const scoredFrames = [];
-    for (let i = 0; i < BURST_COUNT; i++) {
+    for (let i = 0; i < SWEEP_FRAME_COUNT; i++) {
       scoredFrames.push({
+        index: i,
         frame: captureVideoFrame(video),
         score: measureBlurScore(video),
         lighting: measureLighting(video)
       });
-      if (i < BURST_COUNT - 1) await delay(BURST_INTERVAL_MS);
+      setRecordProgress((i + 1) / SWEEP_FRAME_COUNT);
+      if (i < SWEEP_FRAME_COUNT - 1) await delay(SWEEP_FRAME_INTERVAL_MS);
     }
 
-    const sharpFrames = selectSharpBurstFrames(scoredFrames);
-    setIsCapturing(false);
-    // Haptic: photos are in the can — like a camera shutter confirmation.
-    vibrate(100);
+    setIsRecording(false);
+    setRecordProgress(0);
+    // Haptic: recording done — like the reference app's end-of-scan buzz.
+    vibrate([120, 80, 120]);
+
+    const sharpFrames = selectSharpBurstFrames(scoredFrames, { maxCount: MAX_SWEEP_FRAMES_TO_SEND });
 
     if (sharpFrames.length === 0) {
       setGuidance('move_slower');
       const best = Math.round(bestBurstScore(scoredFrames));
-      setLastNotes(`Photos too blurry (best ${best}/${MIN_BLUR_SCORE}). Hold steadier and tap Capture again.`);
+      setLastNotes(`Frames too blurry (best ${best}/${MIN_BLUR_SCORE}). Sweep slower and keep ~20 cm distance, then tap Record again.`);
       return;
     }
 
@@ -108,19 +136,21 @@ export default function useChatGPTScanAnalysis({
       const glariest = Math.max(...sharpFrames.map(f => f.lighting.glareFraction));
       setLastNotes(
         glariest > MAX_GLARE_FRACTION
-          ? 'Glare is washing out the tread — angle away from direct light/flash reflection and tap Capture again.'
-          : `Too dark (brightness ${darkest}/${MIN_BRIGHTNESS}) — add more light and tap Capture again.`
+          ? 'Glare is washing out the tread — angle away from direct light/flash reflection and record again.'
+          : `Too dark (brightness ${darkest}/${MIN_BRIGHTNESS}) — add more light and record again.`
       );
       return;
     }
 
-    const imagesBase64 = wellLitFrames.map(f => f.frame);
+    // Keep sweep order so the model can map first→left shoulder, last→right shoulder
+    const orderedFrames = [...wellLitFrames].sort((a, b) => a.index - b.index);
+    const imagesBase64 = orderedFrames.map(f => f.frame);
 
     apiAttempts.current += 1;
     setAttempt(apiAttempts.current);
     setIsAnalyzing(true);
     setProgress(0.4);
-    setLastNotes(`Analyzing ${imagesBase64.length} photo${imagesBase64.length > 1 ? 's' : ''}…`);
+    setLastNotes(`Analyzing ${imagesBase64.length} frames from your sweep…`);
 
     try {
       const analyses = await analyzeTireFrame({
@@ -128,6 +158,7 @@ export default function useChatGPTScanAnalysis({
         systemPrompt: config.systemPrompt,
         userPrompt: buildUserPrompt({
           tireType: tireTypeRef.current,
+          tirePosition: config.tirePosition,
           targetDistanceCm: getTargetDistanceCm(),
           imageCount: imagesBase64.length
         })
@@ -143,7 +174,7 @@ export default function useChatGPTScanAnalysis({
       if (blocked && apiAttempts.current < MAX_ATTEMPTS) {
         setProgress(0);
         setIsAnalyzing(false);
-        setLastNotes(`${parsed.notes || 'Adjust framing.'} Tap Capture to retry (${apiAttempts.current}/${MAX_ATTEMPTS}).`);
+        setLastNotes(`${parsed.notes || 'Adjust framing.'} Tap Record to retry (${apiAttempts.current}/${MAX_ATTEMPTS}).`);
         return;
       }
 
@@ -159,10 +190,10 @@ export default function useChatGPTScanAnalysis({
           setIsAnalyzing(false);
           setLastNotes(
             parsed.grooves.length === 0
-              ? `No grooves detected. Fill the blue box with tread and tap Capture (${apiAttempts.current}/${MAX_ATTEMPTS}).`
+              ? `No grooves detected. Keep the tread inside the blue box during the sweep and tap Record (${apiAttempts.current}/${MAX_ATTEMPTS}).`
               : parsed.agreement32nds >= 2
-                ? `Analysis runs disagreed by ${parsed.agreement32nds}/32″ — adjust light/angle and tap Capture again.`
-                : `Low confidence (${Math.round(parsed.confidence * 100)}%). Improve lighting and tap Capture again.`
+                ? `Analysis runs disagreed by ${parsed.agreement32nds}/32″ — adjust light/angle and record again.`
+                : `Low confidence (${Math.round(parsed.confidence * 100)}%). Improve lighting and record again.`
           );
           return;
         }
@@ -179,6 +210,10 @@ export default function useChatGPTScanAnalysis({
         depth32nds,
         rating: getSafetyLevelFrom32nds(depth32nds),
         grooves: parsed.grooves,
+        zones: parsed.zones,
+        wearPattern: parsed.wearPattern,
+        alignmentConcern: parsed.alignmentConcern,
+        tirePosition: config.tirePosition ?? null,
         source: 'chatgpt',
         confidence: parsed.confidence,
         notes: parsed.notes,
@@ -193,7 +228,7 @@ export default function useChatGPTScanAnalysis({
       setIsComplete(true);
     } catch (err) {
       if (apiAttempts.current < MAX_ATTEMPTS) {
-        setLastNotes(`${err.message}. Tap Capture to retry.`);
+        setLastNotes(`${err.message}. Tap Record to retry.`);
       } else {
         setAnalysisError(err.message || 'Analysis failed');
         setGuidance('tilt_phone');
@@ -201,9 +236,9 @@ export default function useChatGPTScanAnalysis({
     } finally {
       setIsAnalyzing(false);
     }
-  }, [isReady, isAnalyzing, isCapturing, isComplete, videoRef]);
+  }, [isReady, isAnalyzing, isRecording, isComplete, videoRef]);
 
-  const canCapture = isReady && !isAnalyzing && !isCapturing && !isComplete && attempt < MAX_ATTEMPTS;
+  const canRecord = isReady && !isAnalyzing && !isRecording && !isComplete && attempt < MAX_ATTEMPTS;
 
   return {
     guidance,
@@ -212,11 +247,13 @@ export default function useChatGPTScanAnalysis({
     scanResult,
     analysisError,
     isAnalyzing,
-    isCapturing,
+    isRecording,
+    recordProgress,
+    framing,
     lastNotes,
     attempt,
     maxAttempts: MAX_ATTEMPTS,
-    triggerCapture,
-    canCapture
+    triggerRecord,
+    canRecord
   };
 }

@@ -6,16 +6,40 @@ import ProgressRing from '../ui/ProgressRing.jsx';
 import { SCAN_ROI_STYLE } from '../../utils/scanRoi.js';
 
 const SETUP_STEPS = [
-  { icon: '📱', text: 'Hold the phone upright, 30–40 cm from the tire' },
+  { icon: '🔄', text: 'Rotate your phone sideways (landscape)' },
+  { icon: '📏', text: 'Hold ~20 cm from the tread, parallel to the tire' },
   { icon: '🔦', text: 'Flashlight turns on automatically for even lighting' },
-  { icon: '📏', text: 'Line up the tread so grooves run top-to-bottom in the blue box' },
-  { icon: '📸', text: 'Tap Capture — 3 quick photos, phone buzzes when done' }
+  { icon: '🎥', text: 'Tap Record, then sweep slowly in an arc from one shoulder of the tire to the other (~7 s). The phone buzzes when done.' }
 ];
+
+function useIsLandscape() {
+  const [isLandscape, setIsLandscape] = useState(
+    () => window.matchMedia('(orientation: landscape)').matches
+  );
+  useEffect(() => {
+    const mq = window.matchMedia('(orientation: landscape)');
+    const onChange = e => setIsLandscape(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return isLandscape;
+}
+
+function FramingChip({ ok, okText, badText }) {
+  if (ok == null) return null;
+  return (
+    <span className={`text-[11px] px-2.5 py-1 rounded-full backdrop-blur
+      ${ok ? 'bg-green-600/80 text-white' : 'bg-red-600/80 text-white'}`}>
+      {ok ? `✓ ${okText}` : `✕ ${badText}`}
+    </span>
+  );
+}
 
 export default function ScannerScreen({ tireType, scanConfig, onComplete, onCancel }) {
   const videoRef = useRef(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [showSetup, setShowSetup] = useState(true);
+  const isLandscape = useIsLandscape();
 
   const { error: cameraError, isReady, hasTorch, torchOn, toggleTorch } = useCamera(videoRef);
 
@@ -26,12 +50,14 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
     scanResult,
     analysisError,
     isAnalyzing,
-    isCapturing,
+    isRecording,
+    recordProgress,
+    framing,
     lastNotes,
     attempt,
     maxAttempts,
-    triggerCapture,
-    canCapture
+    triggerRecord,
+    canRecord
   } = useChatGPTScanAnalysis({
     videoRef,
     isReady,
@@ -64,6 +90,7 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
   }, []);
 
   const loading = !isReady ? 'Accessing camera…' : null;
+  const positionLabel = scanConfig?.tirePosition?.label;
 
   return (
     <div className="relative w-full h-full bg-black overflow-hidden">
@@ -91,21 +118,35 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
         </div>
       )}
 
-      {/* Environment setup — align camera before first capture */}
-      {showSetup && !loading && !activeError && (
-        <div className="absolute inset-0 bg-black/80 flex items-center justify-center p-6 z-40">
-          <div className="bg-dark-card rounded-2xl p-6 w-full max-w-sm">
-            <p className="text-lg font-bold mb-4 text-center">Set up your shot</p>
-            <div className="space-y-3 mb-6">
+      {/* Orientation gate — sweep scanning is landscape-only */}
+      {!isLandscape && !loading && !activeError && (
+        <div className="absolute inset-0 bg-black/85 flex flex-col items-center justify-center gap-4 p-8 z-40">
+          <div className="text-6xl animate-pulse">🔄</div>
+          <p className="text-white text-lg font-semibold text-center">Rotate your phone sideways</p>
+          <p className="text-gray-400 text-sm text-center max-w-xs">
+            The tread scan records in landscape. Turn your phone horizontally and hold it
+            parallel to the tire, about 20 cm away.
+          </p>
+        </div>
+      )}
+
+      {/* Environment setup — shown once, in landscape, before first recording */}
+      {showSetup && isLandscape && !loading && !activeError && (
+        <div className="absolute inset-0 bg-black/80 flex items-center justify-center p-6 z-40 overflow-y-auto">
+          <div className="bg-dark-card rounded-2xl p-5 w-full max-w-md">
+            <p className="text-lg font-bold mb-3 text-center">
+              {positionLabel ? `Scan: ${positionLabel} tire` : 'Set up your scan'}
+            </p>
+            <div className="space-y-2.5 mb-5">
               {SETUP_STEPS.map((s, i) => (
                 <div key={i} className="flex items-start gap-3">
-                  <span className="text-xl shrink-0">{s.icon}</span>
+                  <span className="text-lg shrink-0">{s.icon}</span>
                   <p className="text-sm text-gray-200 leading-snug">{s.text}</p>
                 </div>
               ))}
             </div>
             {!hasTorch && (
-              <p className="text-[11px] text-gray-500 mb-4 text-center">
+              <p className="text-[11px] text-gray-500 mb-3 text-center">
                 Flashlight isn't available in this browser — make sure the tread is well lit.
               </p>
             )}
@@ -113,7 +154,7 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
               type="button"
               onClick={() => setShowSetup(false)}
               style={{ touchAction: 'manipulation' }}
-              className="w-full min-h-[52px] py-4 rounded-xl bg-blue-600 text-white font-semibold text-base
+              className="w-full min-h-[48px] py-3 rounded-xl bg-blue-600 text-white font-semibold text-base
                 active:bg-blue-700 active:scale-[0.98]"
             >
               I'm lined up
@@ -122,26 +163,33 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
         </div>
       )}
 
-      {!showSetup && <GuidanceOverlay guidance={guidance} />}
+      {!showSetup && isLandscape && <GuidanceOverlay guidance={guidance} />}
 
       {isAnalyzing && !loading && (
         <div className="absolute top-16 left-0 right-0 flex justify-center z-20 pointer-events-none">
           <div className="bg-purple-700/90 rounded-full px-4 py-1.5 text-xs text-white">
-            Analyzing photos…
+            Analyzing sweep…
           </div>
         </div>
       )}
 
-      {isCapturing && !loading && (
-        <div className="absolute top-16 left-0 right-0 flex justify-center z-20 pointer-events-none">
-          <div className="bg-blue-700/90 rounded-full px-4 py-1.5 text-xs text-white">
-            Hold steady…
+      {isRecording && !loading && (
+        <div className="absolute top-16 left-0 right-0 flex flex-col items-center gap-2 z-20 pointer-events-none px-8">
+          <div className="bg-red-600/90 rounded-full px-4 py-1.5 text-xs text-white flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+            Recording — sweep slowly across the tread
+          </div>
+          <div className="w-full max-w-sm h-1.5 bg-white/20 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-red-500 transition-all duration-300"
+              style={{ width: `${Math.round(recordProgress * 100)}%` }}
+            />
           </div>
         </div>
       )}
 
       {/* ROI bracket — must not intercept touches */}
-      {!loading && (
+      {!loading && isLandscape && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-[1]">
           <div
             className="border-2 border-blue-400/60 rounded-lg pointer-events-none"
@@ -180,35 +228,47 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
       )}
 
       {/* Bottom controls — above all overlays, safe-area aware */}
-      {!loading && !showSetup && (
+      {!loading && !showSetup && isLandscape && (
         <div
           className="absolute bottom-0 left-0 right-0 z-50 pointer-events-auto
             bg-gradient-to-t from-black via-black/90 to-transparent
-            pt-10 px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
+            pt-8 px-6 pb-[max(1rem,env(safe-area-inset-bottom))]"
         >
-          <div className="flex flex-col items-center gap-3 max-w-xs mx-auto">
+          <div className="flex flex-col items-center gap-2 max-w-md mx-auto">
             {isAnalyzing && <ProgressRing progress={progress} />}
+
+            {/* Live framing checks while lining up */}
+            {!isRecording && !isAnalyzing && (
+              <div className="flex gap-2 pointer-events-none">
+                <FramingChip ok={framing.lightOk} okText="Light OK" badText="Too dark / glare" />
+                <FramingChip ok={framing.treadOk} okText="Tread visible" badText="Point at tread" />
+              </div>
+            )}
+
             <p className="text-white/60 text-xs text-center pointer-events-none">
               {isAnalyzing
-                ? 'Sending photos for groove analysis…'
-                : '30–40 cm away · grooves vertical in the blue box'}
+                ? 'Sending frames for zone analysis…'
+                : isRecording
+                  ? 'Keep the tread inside the blue box'
+                  : `${positionLabel ? positionLabel + ' · ' : ''}~20 cm away · parallel to the tire`}
             </p>
-            {lastNotes && (
-              <p className="text-white/40 text-[10px] text-center line-clamp-3 pointer-events-none">
+            {lastNotes && !isRecording && (
+              <p className="text-white/40 text-[10px] text-center line-clamp-2 pointer-events-none">
                 {lastNotes}{attempt > 0 && !isAnalyzing ? ` (${attempt}/${maxAttempts})` : ''}
               </p>
             )}
-            {!isAnalyzing && !isCapturing && (
+            {!isAnalyzing && !isRecording && (
               <button
                 type="button"
-                onClick={triggerCapture}
-                disabled={!canCapture}
+                onClick={triggerRecord}
+                disabled={!canRecord}
                 style={{ touchAction: 'manipulation' }}
-                className="w-full min-h-[52px] py-4 rounded-xl bg-blue-600 text-white font-semibold text-base
-                  shadow-lg shadow-blue-900/40
-                  disabled:opacity-40 disabled:cursor-not-allowed active:bg-blue-700 active:scale-[0.98]"
+                className="flex items-center justify-center gap-2 px-10 min-h-[52px] py-3 rounded-full bg-red-600 text-white font-semibold text-base
+                  shadow-lg shadow-red-900/40
+                  disabled:opacity-40 disabled:cursor-not-allowed active:bg-red-700 active:scale-[0.98]"
               >
-                Capture
+                <span className="w-3 h-3 rounded-full bg-white" />
+                Record
               </button>
             )}
           </div>
@@ -219,14 +279,14 @@ export default function ScannerScreen({ tireType, scanConfig, onComplete, onCanc
         <div className="absolute inset-0 bg-black/60 flex items-center justify-center p-6 z-[60]">
           <div className="bg-dark-card rounded-xl p-6 w-full max-w-xs text-center">
             <p className="font-semibold mb-1">Leave without results?</p>
-            <p className="text-gray-400 text-sm mb-6">Your photo will be discarded.</p>
+            <p className="text-gray-400 text-sm mb-6">Your recording will be discarded.</p>
             <div className="flex gap-3">
               <button
                 type="button"
                 onClick={() => setShowConfirm(false)}
                 className="flex-1 py-3 rounded-lg bg-dark-surface text-sm"
               >
-                Keep Capturing
+                Keep Scanning
               </button>
               <button
                 type="button"

@@ -4,7 +4,9 @@ import {
   MM_PER_32ND,
   MAX_GROOVES,
   GROOVE_POSITION_LABELS,
-  groovePositionsForCount
+  groovePositionsForCount,
+  ZONE_LABELS,
+  WEAR_PATTERN_LABELS
 } from './depthToTread.js';
 import { GUIDANCE_VALUES } from './tireAnalysisPrompt.js';
 
@@ -35,6 +37,32 @@ function parseGrooves(raw) {
 
   const positions = groovePositionsForCount(sorted.length);
   return sorted.map((g, index) => formatGroove(g, index, positions[index]));
+}
+
+const ZONE_ORDER = ['left', 'center', 'right'];
+const WEAR_PATTERNS = new Set(Object.keys(WEAR_PATTERN_LABELS));
+
+function parseZones(raw) {
+  if (!Array.isArray(raw.zones)) return [];
+  return ZONE_ORDER
+    .map(zone => {
+      const z = raw.zones.find(v => v && v.zone === zone && typeof v.depth_32nds === 'number');
+      if (!z) return null;
+      const depth32nds = clamp32nds(z.depth_32nds);
+      return {
+        zone,
+        zoneLabel: ZONE_LABELS[zone],
+        depth32nds,
+        depthMm: parseFloat((depth32nds * MM_PER_32ND).toFixed(1)),
+        rating: getSafetyLevelFrom32nds(depth32nds),
+        confidence: typeof z.confidence === 'number' ? z.confidence : null
+      };
+    })
+    .filter(Boolean);
+}
+
+function parseWearPattern(raw) {
+  return WEAR_PATTERNS.has(raw.wear_pattern) ? raw.wear_pattern : 'unknown';
 }
 
 function summaryFromGrooves(grooves) {
@@ -68,7 +96,10 @@ export function parseChatGPTAnalysis(raw) {
       confidence: 0,
       notes: 'Invalid analysis response',
       grooveVisible: false,
-      treadPattern: 'unknown'
+      treadPattern: 'unknown',
+      zones: [],
+      wearPattern: 'unknown',
+      alignmentConcern: false
     };
   }
 
@@ -110,7 +141,10 @@ export function parseChatGPTAnalysis(raw) {
     notes: raw.notes || '',
     grooveVisible,
     grooveCount: grooves.length,
-    treadPattern
+    treadPattern,
+    zones: parseZones(raw),
+    wearPattern: parseWearPattern(raw),
+    alignmentConcern: raw.alignment_concern === true
   };
 }
 
@@ -182,6 +216,30 @@ export function aggregateParsedAnalyses(parsedRuns) {
   if (maxSpread >= 2) confidence = Math.min(confidence, 0.5);
   else if (maxSpread === 1) confidence *= 0.9;
 
+  // Zones: median depth per zone across runs that reported it
+  const zones = ZONE_ORDER
+    .map(zone => {
+      const zoneRuns = agreeing
+        .map(r => r.zones?.find(z => z.zone === zone))
+        .filter(Boolean);
+      if (zoneRuns.length === 0) return null;
+      const depth32nds = median32nds(zoneRuns.map(z => z.depth32nds));
+      const confs = zoneRuns.map(z => z.confidence).filter(c => typeof c === 'number');
+      return {
+        zone,
+        zoneLabel: ZONE_LABELS[zone],
+        depth32nds,
+        depthMm: parseFloat((depth32nds * MM_PER_32ND).toFixed(1)),
+        rating: getSafetyLevelFrom32nds(depth32nds),
+        confidence: confs.length ? confs.reduce((s, c) => s + c, 0) / confs.length : null
+      };
+    })
+    .filter(Boolean);
+
+  const wearPattern = modalValue(agreeing.map(r => r.wearPattern ?? 'unknown'));
+  const alignmentConcern =
+    agreeing.filter(r => r.alignmentConcern).length > agreeing.length / 2;
+
   return {
     guidance: 'keep_going',
     acceptFrame: true,
@@ -195,6 +253,9 @@ export function aggregateParsedAnalyses(parsedRuns) {
     grooveVisible: true,
     grooveCount,
     treadPattern: modalValue(agreeing.map(r => r.treadPattern)),
+    zones,
+    wearPattern,
+    alignmentConcern,
     sampleCount: runs.length,
     agreement32nds: maxSpread
   };

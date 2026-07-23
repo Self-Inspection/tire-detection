@@ -2,9 +2,9 @@ import { useState } from 'react';
 import Button from '../ui/Button.jsx';
 
 const STEPS = [
-  { icon: '🔍', text: 'Point rear camera at tire tread' },
-  { icon: '📸', text: 'Tap Capture — we take 3 quick photos for accuracy' },
-  { icon: '📊', text: 'Get instant tread depth & safety rating' }
+  { icon: '🛞', text: 'Pick a tire — front-left, rear-right…' },
+  { icon: '🎥', text: 'Rotate sideways & record a slow 7-second sweep across the tread' },
+  { icon: '📊', text: 'Get depth per groove, wear across the tread & a safety rating' }
 ];
 
 export default function HomeScreen({ onCameraGranted }) {

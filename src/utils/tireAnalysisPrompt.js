@@ -13,16 +13,17 @@ export const GUIDANCE_VALUES = [
 export const SCAN_CONFIG_STORAGE_KEY = 'tirecheck-scan-config';
 
 export function getDefaultSystemPrompt() {
-  return `You are an expert tire tread depth inspector analyzing one or more high-resolution photos of the SAME tire tread (burst capture within ~1 second).
+  return `You are an expert tire tread depth inspector analyzing sequential frames of the SAME tire tread, recorded as the user slowly swept their phone in an arc across the tread (landscape orientation, ~20 cm away, phone parallel to the tire surface, ~7 seconds from one tire shoulder to the other).
 
-The images are wide crops (~90% frame width, center band) from portrait phone photos. Rubber tread blocks (ribs/lugs) alternate with recessed grooves. Tread layout varies by design:
+Frame order matters: the FIRST frames show one shoulder of the tread, the MIDDLE frames the center band, and the LAST frames the opposite shoulder. Together the frames cover the full tread width. Each frame is a wide crop (~90% of the camera frame, center band). Rubber tread blocks (ribs/lugs) alternate with recessed grooves. Tread layout varies by design:
 - STRAIGHT (rib/highway) tread: grooves run as continuous parallel lines, usually top-to-bottom in this crop.
 - DIRECTIONAL/CHEVRON tread (angled V- or arrow-shaped lugs, sometimes called "christmas tree" tread — common on off-road, mud, winter and performance tires): the main grooves zigzag or point in a wedge/arrow shape across the frame instead of running straight. This is normal and valid — do not ask the user to reframe just because the pattern is angled.
 
-When multiple photos are provided, cross-check across frames. Count the main grooves in EACH frame independently first; if the counts disagree, report the count seen in the majority of frames (a groove visible in only one frame is likely a shadow or sipe). For depths, prefer readings that agree between frames; if they disagree, use the clearest frame and lower confidence.
+When multiple frames are provided, cross-check across frames. Count the main grooves in EACH frame independently first; if the counts disagree, report the count seen in the majority of frames (a groove visible in only one frame is likely a shadow or sipe). For depths, prefer readings that agree between frames; if they disagree, use the clearest frame and lower confidence.
 
 ## Your task
-Identify EACH visible groove in the image(s) and estimate its remaining depth individually. Then compute an overall summary using the SHALLOWEST groove (minimum depth) — that is the legally relevant measurement.
+1. Identify EACH visible groove and estimate its remaining depth individually. Compute an overall summary using the SHALLOWEST groove (minimum depth) — that is the legally relevant measurement.
+2. Because the sweep covers the tread width, ALSO estimate depth per ZONE: "left" (first frames — one shoulder), "center" (middle frames), "right" (last frames — opposite shoulder). Compare zones to detect uneven wear.
 
 ## Step 0 — classify the tread pattern
 Look at how the dark channels relate to each other across repeated tread blocks:
@@ -51,6 +52,13 @@ This classification changes how you count grooves in Step 3 below — get it rig
    - Set per-groove confidence 0.0–1.0. Lower confidence when the groove's edges are ambiguous (could be shadow) or when tread_pattern is "directional" and the angle makes depth harder to judge.
 4. Check tread wear indicator bars (TWIs). If flush with surface, affected grooves are ~2/32". TWI bars sit inside the main grooves and are a reliable anchor point even on directional tread.
 5. Overall measurement = minimum depth_32nds across all grooves.
+6. Zone analysis: estimate a representative depth_32nds for the left-shoulder frames, center frames, and right-shoulder frames. Then classify wear_pattern:
+   - "even" — zones within 1/32" of each other
+   - "left_worn" / "right_worn" — one shoulder ≥2/32" shallower (possible alignment/camber issue → alignment_concern: true)
+   - "center_worn" — center ≥2/32" shallower than both shoulders (often over-inflation)
+   - "edges_worn" — both shoulders ≥2/32" shallower than center (often under-inflation)
+   - "patchy" — irregular, no clear pattern
+   - "unknown" — zones could not be compared
 
 ## Depth scale (32nds) — ONLY integers 2–10
 - 10, 9, 8 = GOOD
@@ -82,6 +90,11 @@ Return ONLY JSON:
       "confidence": number
     }
   ],
+  "zones": [
+    { "zone": "left|center|right", "depth_32nds": number, "confidence": number }
+  ],
+  "wear_pattern": "even|left_worn|right_worn|center_worn|edges_worn|patchy|unknown",
+  "alignment_concern": boolean,
   "measurement": {
     "depth_32nds": number|null,
     "depth_mm": number|null,
@@ -101,19 +114,21 @@ Rules:
 - If lighting is too dark, blown out by glare/flash reflection, or too uneven to tell a groove from a shadow → lighting_ok: false, guidance: poor_lighting.
 - Overall confidence = average of per-groove confidences, or 0 if none.
 - Reject (tilt_phone, empty grooves) if overall confidence would be below 0.6.
-- notes: mention how many MAIN grooves were measured, the tread_pattern classification, and the shallowest reading. If tread_pattern is "directional", say so explicitly (e.g. "directional/chevron tread, 3 main grooves, shallowest 5/32"").`;
+- zones: always include all three zones when frames span the tread width; if the sweep clearly failed (all frames identical), return zones: [] and wear_pattern: "unknown".
+- alignment_concern: true only for left_worn / right_worn patterns.
+- notes: mention how many MAIN grooves were measured, the tread_pattern classification, the shallowest reading, and the wear pattern. If tread_pattern is "directional", say so explicitly (e.g. "directional/chevron tread, 3 main grooves, shallowest 5/32"").`;
 }
 
-export function buildUserPrompt({ tireType, targetDistanceCm, imageCount = 1 }) {
+export function buildUserPrompt({ tireType, tirePosition, targetDistanceCm, imageCount = 1 }) {
   const frames = imageCount > 1
-    ? `${imageCount} photos of the same tread (burst capture). Cross-check depths across frames.`
+    ? `${imageCount} sequential frames from a ~7 s sweep across the tread (first frames = one shoulder, last frames = opposite shoulder). Cross-check depths across frames.`
     : 'One photo of tire tread.';
 
-  return `${frames} First classify tread_pattern (straight vs. directional/chevron — angled "christmas tree"-style lugs are common and valid, do not reject the photo for that). Then find up to ${MAX_GROOVES} MAIN grooves only (never sipes or shadows) and measure depth for each, tracing angled/zigzag grooves along their real path rather than assuming straight rows. Use position labels: left, central-left, central-right, right (4 grooves) or left, central, right (3 grooves).
+  return `${frames} First classify tread_pattern (straight vs. directional/chevron — angled "christmas tree"-style lugs are common and valid, do not reject the photo for that). Then find up to ${MAX_GROOVES} MAIN grooves only (never sipes or shadows) and measure depth for each, tracing angled/zigzag grooves along their real path rather than assuming straight rows. Use position labels: left, central-left, central-right, right (4 grooves) or left, central, right (3 grooves). Also report per-zone depths (left/center/right across the sweep) and classify the wear pattern.
 
-Tire type: ${tireType?.label ?? 'car'} (tread width ~${tireType?.treadWidthMm ?? 190} mm)
-Camera distance: ${targetDistanceCm} cm, portrait orientation.
-Return per-groove depths plus overall minimum in JSON.`;
+Tire: ${tirePosition?.label ?? 'unknown position'}, ${tireType?.label ?? 'car'} (tread width ~${tireType?.treadWidthMm ?? 190} mm)
+Camera distance: ~${targetDistanceCm} cm, landscape orientation, phone parallel to tread.
+Return per-groove depths, per-zone depths, wear pattern, and overall minimum in JSON.`;
 }
 
 export function loadScanConfig() {
@@ -131,5 +146,5 @@ export function saveScanConfig(config) {
 }
 
 export function getTargetDistanceCm() {
-  return '30-40';
+  return '20';
 }
