@@ -176,6 +176,11 @@ app.post('/api/analyze-frame', async (req, res) => {
 if (isProd) {
   const distPath = path.join(__dirname, 'dist');
   app.use(express.static(distPath));
+  // Hashed assets that don't exist must 404 — serving index.html here makes
+  // stale clients execute HTML as JS ("'text/html' is not a valid MIME type").
+  app.get('/assets/*', (_req, res) => {
+    res.status(404).end();
+  });
   app.get('*', (_req, res) => {
     res.sendFile(path.join(distPath, 'index.html'));
   });

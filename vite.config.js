@@ -13,6 +13,7 @@ export default defineConfig(({ command }) => ({
     command === 'serve' && basicSsl(),
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: null, // registered manually in src/main.jsx with periodic update checks
       manifest: {
         name: 'TireCheck — Tread Depth',
         short_name: 'TireCheck',
@@ -24,16 +25,9 @@ export default defineConfig(({ command }) => ({
         start_url: '/'
       },
       workbox: {
-        runtimeCaching: [
-          {
-            urlPattern: /storage\.googleapis\.com\/tfjs-models/,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'tf-models',
-              expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 30 }
-            }
-          }
-        ]
+        cleanupOutdatedCaches: true,
+        skipWaiting: true,
+        clientsClaim: true
       }
     })
   ].filter(Boolean),
